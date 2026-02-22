@@ -1,0 +1,43 @@
+[package]
+name = "cratesio-mcp"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+description = "MCP server for querying crates.io - the Rust package registry"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/joshrotenberg/cratesio-mcp"
+keywords = ["mcp", "crates-io", "rust", "tower"]
+categories = ["development-tools", "web-programming"]
+
+[[bin]]
+name = "cratesio-mcp"
+path = "src/main.rs"
+
+[dependencies]
+# Core MCP
+tower-mcp = { version = "0.6", features = ["http"] }
+
+# Crates.io API client
+crates_io_api = "0.12"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Schema generation
+schemars = "1"
+
+# Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Tower middleware
+tower = { version = "0.5", features = ["util", "timeout", "limit"] }
+# 0.7.1 adds SharedCacheLayer for cross-session cache sharing
+tower-resilience = { version = "0.7.1", default-features = false, features = ["bulkhead", "ratelimiter", "cache"] }
