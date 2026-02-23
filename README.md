@@ -6,7 +6,7 @@ Built with [tower-mcp](https://github.com/joshrotenberg/tower-mcp).
 
 ## Features
 
-### Tools (20)
+### Tools (21)
 
 | Tool | Description | Status |
 |------|-------------|--------|
@@ -30,7 +30,7 @@ Built with [tower-mcp](https://github.com/joshrotenberg/tower-mcp).
 | `get_crate_docs` | Browse crate documentation structure from docs.rs | Implemented |
 | `get_doc_item` | Get full docs for a specific item (fn, struct, trait) | Implemented |
 | `search_docs` | Search for items by name within a crate's docs | Implemented |
-| `audit_dependencies` | Check deps against RustSec advisory DB | [Planned (#7)](https://github.com/joshrotenberg/cratesio-mcp/issues/7) |
+| `audit_dependencies` | Check deps against OSV.dev vulnerability database | Implemented |
 
 ### Resources (2)
 
@@ -168,12 +168,12 @@ The client covers 46 endpoints across crates, versions, owners, categories, keyw
 
 - [x] Custom crates.io API client (46 endpoints)
 - [x] Library crate extraction
-- [x] 20 MCP tools
+- [x] 21 MCP tools
 - [x] Resources, prompts, and completions
 - [x] Tower middleware stack (timeout, rate limit, bulkhead, cache)
 - [x] stdio and HTTP transports
 - [x] docs.rs integration ([#2](https://github.com/joshrotenberg/cratesio-mcp/issues/2))
-- [ ] Dependency security audit via RustSec ([#7](https://github.com/joshrotenberg/cratesio-mcp/issues/7))
+- [x] Dependency security audit via OSV.dev ([#7](https://github.com/joshrotenberg/cratesio-mcp/issues/7))
 - [ ] CI pipeline ([#5](https://github.com/joshrotenberg/cratesio-mcp/issues/5))
 - [ ] Publish to crates.io ([#4](https://github.com/joshrotenberg/cratesio-mcp/issues/4))
 - [ ] Fly.io deployment ([#6](https://github.com/joshrotenberg/cratesio-mcp/issues/6))

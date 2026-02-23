@@ -129,6 +129,7 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
     let get_crate_docs_tool = tools::get_crate_docs::build(state.clone());
     let get_doc_item_tool = tools::get_doc_item::build(state.clone());
     let search_docs_tool = tools::search_docs::build(state.clone());
+    let audit_tool = tools::audit::build(state.clone());
 
     // Create base router with tools (always registered)
     let instructions = if args.minimal {
@@ -153,7 +154,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - get_keyword: Details about a specific keyword\n\
          - get_crate_docs: Browse crate documentation structure from docs.rs\n\
          - get_doc_item: Get full documentation for a specific item from docs.rs\n\
-         - search_docs: Search for items by name within a crate's docs\n\n\
+         - search_docs: Search for items by name within a crate's docs\n\
+         - audit_dependencies: Check deps against OSV.dev vulnerability database\n\n\
          (Running in minimal mode - resources, prompts, and completions disabled)"
     } else {
         "MCP server for querying crates.io - the Rust package registry.\n\n\
@@ -177,7 +179,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - get_keyword: Details about a specific keyword\n\
          - get_crate_docs: Browse crate documentation structure from docs.rs\n\
          - get_doc_item: Get full documentation for a specific item from docs.rs\n\
-         - search_docs: Search for items by name within a crate's docs\n\n\
+         - search_docs: Search for items by name within a crate's docs\n\
+         - audit_dependencies: Check deps against OSV.dev vulnerability database\n\n\
          Resources:\n\
          - crates://{name}/info: Get crate info as a resource\n\n\
          Use the prompts for guided analysis:\n\
@@ -207,7 +210,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
         .tool(keyword_detail_tool)
         .tool(get_crate_docs_tool)
         .tool(get_doc_item_tool)
-        .tool(search_docs_tool);
+        .tool(search_docs_tool)
+        .tool(audit_tool);
 
     // Add resources, prompts, and completions unless in minimal mode
     // Minimal mode works around Claude Code MCP tool discovery issues

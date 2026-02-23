@@ -5,6 +5,7 @@
 
 pub mod docsrs;
 pub mod error;
+pub mod osv;
 pub mod query;
 pub mod types;
 pub(crate) mod wire;
