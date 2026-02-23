@@ -3,6 +3,8 @@
 use std::time::Duration;
 
 use crate::client::CratesIoClient;
+use crate::client::docsrs::DocsRsClient;
+use crate::docs::cache::DocsCache;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -19,6 +21,10 @@ pub struct CrateSummary {
 pub struct AppState {
     /// Crates.io API client (already rate-limited internally)
     pub client: CratesIoClient,
+    /// docs.rs API client for rustdoc JSON
+    pub docsrs_client: DocsRsClient,
+    /// Cache for parsed rustdoc JSON
+    pub docs_cache: DocsCache,
     /// Recent search queries (exposed as a resource)
     pub recent_searches: RwLock<Vec<(String, Vec<CrateSummary>)>>,
 }
@@ -28,15 +34,24 @@ impl AppState {
     ///
     /// # Arguments
     /// * `rate_limit` - Minimum interval between crates.io API calls
-    pub fn new(rate_limit: Duration) -> Result<Self, tower_mcp::BoxError> {
-        let client = CratesIoClient::new(
-            "cratesio-mcp (https://github.com/joshrotenberg/cratesio-mcp)",
-            rate_limit,
-        )
-        .map_err(|e| format!("Failed to create crates.io client: {e}"))?;
+    /// * `docs_cache_max_entries` - Maximum cached rustdoc JSON entries
+    /// * `docs_cache_ttl` - TTL for cached rustdoc JSON entries
+    pub fn new(
+        rate_limit: Duration,
+        docs_cache_max_entries: usize,
+        docs_cache_ttl: Duration,
+    ) -> Result<Self, tower_mcp::BoxError> {
+        let user_agent = "cratesio-mcp (https://github.com/joshrotenberg/cratesio-mcp)";
+        let client = CratesIoClient::new(user_agent, rate_limit)
+            .map_err(|e| format!("Failed to create crates.io client: {e}"))?;
+        let docsrs_client = DocsRsClient::new(user_agent)
+            .map_err(|e| format!("Failed to create docs.rs client: {e}"))?;
+        let docs_cache = DocsCache::new(docs_cache_max_entries, docs_cache_ttl);
 
         Ok(Self {
             client,
+            docsrs_client,
+            docs_cache,
             recent_searches: RwLock::new(Vec::new()),
         })
     }

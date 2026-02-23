@@ -3,6 +3,7 @@
 //! Async client for the crates.io REST API, built on reqwest with built-in
 //! rate limiting. Supports both anonymous and authenticated access.
 
+pub mod docsrs;
 pub mod error;
 pub mod query;
 pub mod types;
