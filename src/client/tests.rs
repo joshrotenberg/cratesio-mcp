@@ -4,6 +4,9 @@ use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use super::CratesIoClient;
+use super::types::{
+    CrateSettings, NewGitHubConfig, NewGitLabConfig, PublishMetadata, VersionSettings,
+};
 
 /// Create a client pointed at the mock server with no rate limiting.
 fn test_client(base_url: &str) -> CratesIoClient {
@@ -938,4 +941,733 @@ async fn auth_header_sent_on_authenticated_request() {
     let user = client.me().await.unwrap();
 
     assert_eq!(user.login, "testuser");
+}
+
+// ── update_crate ────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn update_crate_sends_patch() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("PATCH"))
+        .and(path("/crates/my-crate"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(GET_CRATE_JSON, "application/json"))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let settings = CrateSettings {
+        description: Some("Updated description".into()),
+        documentation: None,
+        homepage: None,
+        repository: None,
+    };
+    let resp = client.update_crate("my-crate", settings).await.unwrap();
+
+    assert_eq!(resp.crate_data.name, "tower-mcp");
+}
+
+// ── delete_crate ────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn delete_crate_sends_delete() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("DELETE"))
+        .and(path("/crates/my-crate"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    client.delete_crate("my-crate").await.unwrap();
+}
+
+// ── follow_crate ────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn follow_crate_sends_put() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/crates/my-crate/follow"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let resp = client.follow_crate("my-crate").await.unwrap();
+
+    assert!(resp.ok);
+}
+
+// ── unfollow_crate ──────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn unfollow_crate_sends_delete() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("DELETE"))
+        .and(path("/crates/my-crate/follow"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let resp = client.unfollow_crate("my-crate").await.unwrap();
+
+    assert!(resp.ok);
+}
+
+// ── is_following ────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn is_following_returns_bool() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/crates/my-crate/following"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"following": true})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let following = client.is_following("my-crate").await.unwrap();
+
+    assert!(following);
+}
+
+// ── yank_version ────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn yank_version_sends_delete() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("DELETE"))
+        .and(path("/crates/my-crate/1.0.0/yank"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let resp = client.yank_version("my-crate", "1.0.0").await.unwrap();
+
+    assert!(resp.ok);
+}
+
+// ── unyank_version ──────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn unyank_version_sends_put() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/crates/my-crate/1.0.0/unyank"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let resp = client.unyank_version("my-crate", "1.0.0").await.unwrap();
+
+    assert!(resp.ok);
+}
+
+// ── update_version ──────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn update_version_sends_patch() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("PATCH"))
+        .and(path("/crates/my-crate/1.0.0"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(VERSION_JSON, "application/json"))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let settings = VersionSettings { yanked: Some(true) };
+    let version = client
+        .update_version("my-crate", "1.0.0", settings)
+        .await
+        .unwrap();
+
+    assert_eq!(version.num, "0.6.0");
+}
+
+// ── add_owners ──────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn add_owners_sends_put() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/crates/my-crate/owners"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let resp = client
+        .add_owners("my-crate", vec!["user1".into()])
+        .await
+        .unwrap();
+
+    assert!(resp.ok);
+}
+
+// ── remove_owners ───────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn remove_owners_sends_delete() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("DELETE"))
+        .and(path("/crates/my-crate/owners"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let resp = client
+        .remove_owners("my-crate", vec!["user1".into()])
+        .await
+        .unwrap();
+
+    assert!(resp.ok);
+}
+
+// ── crate_owner_invitations ─────────────────────────────────────────────────
+
+#[tokio::test]
+async fn crate_owner_invitations_returns_list() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/crates/my-crate/owner_invitations"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "crate_owner_invitations": [{
+                "invited_by_username": "owner",
+                "crate_name": "my-crate",
+                "crate_id": 42,
+                "created_at": "2026-02-20T00:00:00.000000Z"
+            }]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let invitations = client.crate_owner_invitations("my-crate").await.unwrap();
+
+    assert_eq!(invitations.len(), 1);
+    assert_eq!(invitations[0].invited_by_username, "owner");
+    assert_eq!(invitations[0].crate_name, "my-crate");
+    assert_eq!(invitations[0].crate_id, 42);
+}
+
+// ── my_owner_invitations ────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn my_owner_invitations_returns_list() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/me/crate_owner_invitations"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "crate_owner_invitations": [{
+                "invited_by_username": "someone",
+                "crate_name": "cool-crate",
+                "crate_id": 99,
+                "created_at": "2026-02-21T00:00:00.000000Z"
+            }]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let invitations = client.my_owner_invitations().await.unwrap();
+
+    assert_eq!(invitations.len(), 1);
+    assert_eq!(invitations[0].crate_name, "cool-crate");
+    assert_eq!(invitations[0].crate_id, 99);
+}
+
+// ── handle_owner_invitation ─────────────────────────────────────────────────
+
+#[tokio::test]
+async fn handle_owner_invitation_sends_put() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/me/crate_owner_invitations/42"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let resp = client.handle_owner_invitation(42, true).await.unwrap();
+
+    assert!(resp.ok);
+}
+
+// ── accept_invitation_by_token ──────────────────────────────────────────────
+
+#[tokio::test]
+async fn accept_invitation_by_token_sends_put() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/crate_owner_invitations/abc123"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "crate_owner_invitation": {
+                "accepted": true,
+                "crate_id": 42
+            }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // No auth required for token-based acceptance.
+    let client = test_client(&server.uri());
+    let crate_id = client.accept_invitation_by_token("abc123").await.unwrap();
+
+    assert_eq!(crate_id, 42);
+}
+
+// ── update_user ─────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn update_user_sends_put() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/users/12345"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    client
+        .update_user(12345, Some("test@example.com".into()))
+        .await
+        .unwrap();
+}
+
+// ── my_updates ──────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn my_updates_returns_versions() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/me/updates"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "versions": [{
+                "num": "1.0.0",
+                "yanked": false,
+                "created_at": "2026-02-20T00:00:00.000000Z",
+                "downloads": 100
+            }],
+            "meta": { "more": false }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let (versions, more) = client.my_updates(None, None).await.unwrap();
+
+    assert_eq!(versions.len(), 1);
+    assert_eq!(versions[0].num, "1.0.0");
+    assert!(!more);
+}
+
+// ── list_tokens ─────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn list_tokens_returns_list() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/me/tokens"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "api_tokens": [{
+                "id": 1,
+                "name": "ci-token",
+                "created_at": "2026-01-01T00:00:00.000000Z"
+            }]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let tokens = client.list_tokens().await.unwrap();
+
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].id, 1);
+    assert_eq!(tokens[0].name, "ci-token");
+}
+
+// ── create_token ────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn create_token_sends_put() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/me/tokens"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "api_token": {
+                "id": 2,
+                "name": "new-token",
+                "created_at": "2026-02-22T00:00:00.000000Z"
+            }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let token = client.create_token("new-token", None, None).await.unwrap();
+
+    assert_eq!(token.id, 2);
+    assert_eq!(token.name, "new-token");
+}
+
+// ── get_token ───────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn get_token_returns_token() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/me/tokens/1"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "api_token": {
+                "id": 1,
+                "name": "ci-token",
+                "created_at": "2026-01-01T00:00:00.000000Z"
+            }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let token = client.get_token(1).await.unwrap();
+
+    assert_eq!(token.id, 1);
+    assert_eq!(token.name, "ci-token");
+}
+
+// ── revoke_token ────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn revoke_token_sends_delete() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("DELETE"))
+        .and(path("/me/tokens/1"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    client.revoke_token(1).await.unwrap();
+}
+
+// ── revoke_current_token ────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn revoke_current_token_sends_delete() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("DELETE"))
+        .and(path("/tokens/current"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    client.revoke_current_token().await.unwrap();
+}
+
+// ── list_github_configs ─────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn list_github_configs_returns_list() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/trustpub/github_configs"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "github_configs": [{
+                "id": 1,
+                "crate_name": "my-crate",
+                "repository_owner": "myorg",
+                "repository_name": "my-crate",
+                "workflow_filename": "release.yml",
+                "environment": null,
+                "created_at": "2026-02-01T00:00:00.000000Z"
+            }]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let configs = client.list_github_configs().await.unwrap();
+
+    assert_eq!(configs.len(), 1);
+    assert_eq!(configs[0].id, 1);
+    assert_eq!(configs[0].crate_name, "my-crate");
+    assert_eq!(configs[0].repository_owner, "myorg");
+    assert_eq!(configs[0].workflow_filename.as_deref(), Some("release.yml"));
+}
+
+// ── create_github_config ────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn create_github_config_sends_post() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/trustpub/github_configs"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "github_config": {
+                "id": 2,
+                "crate_name": "my-crate",
+                "repository_owner": "myorg",
+                "repository_name": "my-crate",
+                "workflow_filename": "publish.yml",
+                "environment": null,
+                "created_at": "2026-02-22T00:00:00.000000Z"
+            }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let config = NewGitHubConfig {
+        crate_name: "my-crate".into(),
+        repository_owner: "myorg".into(),
+        repository_name: "my-crate".into(),
+        workflow_filename: Some("publish.yml".into()),
+        environment: None,
+    };
+    let result = client.create_github_config(config).await.unwrap();
+
+    assert_eq!(result.id, 2);
+    assert_eq!(result.crate_name, "my-crate");
+}
+
+// ── delete_github_config ────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn delete_github_config_sends_delete() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("DELETE"))
+        .and(path("/trustpub/github_configs/1"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    client.delete_github_config(1).await.unwrap();
+}
+
+// ── list_gitlab_configs ─────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn list_gitlab_configs_returns_list() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/trustpub/gitlab_configs"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "gitlab_configs": [{
+                "id": 1,
+                "crate_name": "my-crate",
+                "project_path": "myorg/my-crate",
+                "environment": null,
+                "created_at": "2026-02-01T00:00:00.000000Z"
+            }]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let configs = client.list_gitlab_configs().await.unwrap();
+
+    assert_eq!(configs.len(), 1);
+    assert_eq!(configs[0].id, 1);
+    assert_eq!(configs[0].crate_name, "my-crate");
+    assert_eq!(configs[0].project_path, "myorg/my-crate");
+}
+
+// ── create_gitlab_config ────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn create_gitlab_config_sends_post() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/trustpub/gitlab_configs"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "gitlab_config": {
+                "id": 2,
+                "crate_name": "my-crate",
+                "project_path": "myorg/my-crate",
+                "environment": null,
+                "created_at": "2026-02-22T00:00:00.000000Z"
+            }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let config = NewGitLabConfig {
+        crate_name: "my-crate".into(),
+        project_path: "myorg/my-crate".into(),
+        environment: None,
+    };
+    let result = client.create_gitlab_config(config).await.unwrap();
+
+    assert_eq!(result.id, 2);
+    assert_eq!(result.crate_name, "my-crate");
+}
+
+// ── delete_gitlab_config ────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn delete_gitlab_config_sends_delete() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("DELETE"))
+        .and(path("/trustpub/gitlab_configs/1"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    client.delete_gitlab_config(1).await.unwrap();
+}
+
+// ── exchange_oidc_token ─────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn exchange_oidc_token_sends_post() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/trustpub/tokens/exchange"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "token": "cio-publish-token-abc"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // No auth required -- the OIDC JWT is in the request body.
+    let client = test_client(&server.uri());
+    let token = client.exchange_oidc_token("my-jwt").await.unwrap();
+
+    assert_eq!(token, "cio-publish-token-abc");
+}
+
+// ── publish ─────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn publish_sends_binary_body() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/crates/new"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "warnings": {
+                "invalid_categories": [],
+                "invalid_badges": [],
+                "other": []
+            }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    let metadata = PublishMetadata {
+        name: "my-crate".into(),
+        version: "0.1.0".into(),
+        deps: vec![],
+        description: Some("A test crate".into()),
+        license: Some("MIT".into()),
+        license_file: None,
+        repository: None,
+        homepage: None,
+        documentation: None,
+        keywords: vec![],
+        categories: vec![],
+        readme: None,
+        readme_file: None,
+        rust_version: None,
+    };
+    let tarball = b"fake-tarball-data";
+    let warnings = client.publish(&metadata, tarball).await.unwrap();
+
+    assert!(warnings.invalid_categories.is_empty());
+    assert!(warnings.invalid_badges.is_empty());
+    assert!(warnings.other.is_empty());
 }
