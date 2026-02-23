@@ -8,29 +8,29 @@ Built with [tower-mcp](https://github.com/joshrotenberg/tower-mcp).
 
 ### Tools (21)
 
-| Tool | Description | Status |
-|------|-------------|--------|
-| `search_crates` | Search for crates by name or keywords | Implemented |
-| `get_crate_info` | Detailed crate metadata (description, links, stats) | Implemented |
-| `get_crate_versions` | Version history with release dates and download counts | Implemented |
-| `get_crate_readme` | README content for a crate version | Implemented |
-| `get_dependencies` | Dependencies for a specific version | Implemented |
-| `get_reverse_dependencies` | Crates that depend on a given crate | Implemented |
-| `get_downloads` | Download statistics and trends | Implemented |
-| `get_crate_authors` | Authors listed in Cargo.toml | Implemented |
-| `get_owners` | Crate owners and maintainers | Implemented |
-| `get_user` | User profile by GitHub username | Implemented |
-| `get_summary` | crates.io global statistics | Implemented |
-| `get_categories` | Browse crates.io categories | Implemented |
-| `get_category` | Details for a specific category | Implemented |
-| `get_keywords` | Browse crates.io keywords | Implemented |
-| `get_keyword` | Details for a specific keyword | Implemented |
-| `get_version_downloads` | Daily download stats for a specific version | Implemented |
-| `get_crate_version` | Detailed metadata for a specific version | Implemented |
-| `get_crate_docs` | Browse crate documentation structure from docs.rs | Implemented |
-| `get_doc_item` | Get full docs for a specific item (fn, struct, trait) | Implemented |
-| `search_docs` | Search for items by name within a crate's docs | Implemented |
-| `audit_dependencies` | Check deps against OSV.dev vulnerability database | Implemented |
+| Tool | Description |
+|------|-------------|
+| `search_crates` | Search for crates by name or keywords |
+| `get_crate_info` | Detailed crate metadata (description, links, stats) |
+| `get_crate_versions` | Version history with release dates and download counts |
+| `get_crate_readme` | README content for a crate version |
+| `get_dependencies` | Dependencies for a specific version |
+| `get_reverse_dependencies` | Crates that depend on a given crate |
+| `get_downloads` | Download statistics and trends |
+| `get_crate_authors` | Authors listed in Cargo.toml |
+| `get_owners` | Crate owners and maintainers |
+| `get_user` | User profile by GitHub username |
+| `get_summary` | crates.io global statistics |
+| `get_categories` | Browse crates.io categories |
+| `get_category` | Details for a specific category |
+| `get_keywords` | Browse crates.io keywords |
+| `get_keyword` | Details for a specific keyword |
+| `get_version_downloads` | Daily download stats for a specific version |
+| `get_crate_version` | Detailed metadata for a specific version |
+| `get_crate_docs` | Browse crate documentation structure from docs.rs |
+| `get_doc_item` | Get full docs for a specific item (fn, struct, trait) |
+| `search_docs` | Search for items by name within a crate's docs |
+| `audit_dependencies` | Check deps against OSV.dev vulnerability database |
 
 ### Resources (2)
 
@@ -67,11 +67,7 @@ The HTTP transport includes a tower middleware stack:
 
 ## Installation
 
-```bash
-cargo install cratesio-mcp
-```
-
-Or build from source:
+Build from source:
 
 ```bash
 git clone https://github.com/joshrotenberg/cratesio-mcp
@@ -93,23 +89,46 @@ cratesio-mcp
 cratesio-mcp --transport http --port 3000
 ```
 
+### Minimal mode
+
+Use `--minimal` to register only tools (no prompts, resources, or completions). This is useful for Claude Code, which currently has issues discovering tools when prompts and resources are also registered ([anthropics/claude-code#2682](https://github.com/anthropics/claude-code/issues/2682)).
+
+```bash
+cratesio-mcp --minimal
+```
+
 ### CLI options
 
 ```text
+Usage: cratesio-mcp [OPTIONS]
+
 Options:
-  -t, --transport <TRANSPORT>              Transport: stdio or http [default: stdio]
-      --max-concurrent <N>                 Max concurrent requests [default: 10]
-      --rate-limit-ms <MS>                 Rate limit interval in ms [default: 1000]
-  -l, --log-level <LEVEL>                  Log level [default: info]
-      --host <HOST>                        HTTP bind address [default: 127.0.0.1]
-  -p, --port <PORT>                        HTTP port [default: 3000]
-      --request-timeout-secs <S>           Request timeout [default: 30]
-      --minimal                            Tools only (no prompts/resources/completions)
-      --cache-enabled                      Enable response caching [default: true]
-      --cache-ttl-secs <S>                 Cache TTL [default: 300]
-      --cache-max-size <N>                 Max cached responses [default: 200]
-      --docs-cache-max-entries <N>         Max cached docs.rs entries [default: 10]
-      --docs-cache-ttl-secs <S>            docs.rs cache TTL [default: 3600]
+  -t, --transport <TRANSPORT>
+          Transport to use [default: stdio] [possible values: stdio, http]
+      --max-concurrent <MAX_CONCURRENT>
+          Maximum concurrent requests (concurrency limit) [default: 10]
+      --rate-limit-ms <RATE_LIMIT_MS>
+          Rate limit interval between crates.io API calls (in milliseconds) [default: 1000]
+  -l, --log-level <LOG_LEVEL>
+          Log level [default: info]
+      --host <HOST>
+          HTTP host to bind to (use 0.0.0.0 for public access) [default: 127.0.0.1]
+  -p, --port <PORT>
+          HTTP port to bind to [default: 3000]
+      --request-timeout-secs <REQUEST_TIMEOUT_SECS>
+          Request timeout in seconds (for HTTP transport) [default: 30]
+      --minimal
+          Minimal mode - only register tools (no prompts, resources, or completions)
+      --cache-enabled
+          Enable response caching for tool calls (HTTP transport only)
+      --cache-ttl-secs <CACHE_TTL_SECS>
+          Cache TTL in seconds (how long cached responses are valid) [default: 300]
+      --cache-max-size <CACHE_MAX_SIZE>
+          Maximum number of cached responses [default: 200]
+      --docs-cache-max-entries <DOCS_CACHE_MAX_ENTRIES>
+          Maximum number of cached docs.rs rustdoc JSON entries [default: 10]
+      --docs-cache-ttl-secs <DOCS_CACHE_TTL_SECS>
+          TTL for cached docs.rs rustdoc JSON entries (in seconds) [default: 3600]
 ```
 
 ## MCP client configuration
@@ -172,11 +191,14 @@ The client covers 46 endpoints across crates, versions, owners, categories, keyw
 - [x] Resources, prompts, and completions
 - [x] Tower middleware stack (timeout, rate limit, bulkhead, cache)
 - [x] stdio and HTTP transports
+- [x] CI pipeline ([#5](https://github.com/joshrotenberg/cratesio-mcp/issues/5))
 - [x] docs.rs integration ([#2](https://github.com/joshrotenberg/cratesio-mcp/issues/2))
 - [x] Dependency security audit via OSV.dev ([#7](https://github.com/joshrotenberg/cratesio-mcp/issues/7))
-- [ ] CI pipeline ([#5](https://github.com/joshrotenberg/cratesio-mcp/issues/5))
 - [ ] Publish to crates.io ([#4](https://github.com/joshrotenberg/cratesio-mcp/issues/4))
 - [ ] Fly.io deployment ([#6](https://github.com/joshrotenberg/cratesio-mcp/issues/6))
+- [ ] Feature flag analysis tool ([#15](https://github.com/joshrotenberg/cratesio-mcp/issues/15))
+- [ ] New resources: readme, docs ([#16](https://github.com/joshrotenberg/cratesio-mcp/issues/16))
+- [ ] User download stats tool ([#18](https://github.com/joshrotenberg/cratesio-mcp/issues/18))
 
 ## License
 
