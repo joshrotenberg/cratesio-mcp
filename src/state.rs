@@ -86,6 +86,33 @@ impl AppState {
         })
     }
 
+    /// Create application state with custom base URLs for all clients (for testing).
+    ///
+    /// Points all three clients at specified base URLs with zero rate limiting.
+    pub fn with_all_base_urls(
+        crates_url: &str,
+        docsrs_url: &str,
+        osv_url: &str,
+    ) -> Result<Self, tower_mcp::BoxError> {
+        let user_agent = "cratesio-mcp-test";
+        let client =
+            CratesIoClient::with_base_url(user_agent, Duration::from_millis(0), crates_url)
+                .map_err(|e| format!("Failed to create crates.io client: {e}"))?;
+        let docsrs_client = DocsRsClient::with_base_url(user_agent, docsrs_url)
+            .map_err(|e| format!("Failed to create docs.rs client: {e}"))?;
+        let osv_client = OsvClient::with_base_url(user_agent, osv_url)
+            .map_err(|e| format!("Failed to create OSV client: {e}"))?;
+        let docs_cache = DocsCache::new(10, Duration::from_secs(60));
+
+        Ok(Self {
+            client,
+            docsrs_client,
+            osv_client,
+            docs_cache,
+            recent_searches: RwLock::new(Vec::new()),
+        })
+    }
+
     /// Save a search query and its results for the recent searches resource
     pub async fn save_search(&self, query: String, results: Vec<CrateSummary>) {
         let mut searches = self.recent_searches.write().await;
@@ -105,5 +132,68 @@ pub fn format_number(n: u64) -> String {
         format!("{:.1}K", n as f64 / 1_000.0)
     } else {
         n.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_number_small() {
+        assert_eq!(format_number(0), "0");
+        assert_eq!(format_number(1), "1");
+        assert_eq!(format_number(999), "999");
+    }
+
+    #[test]
+    fn format_number_thousands() {
+        assert_eq!(format_number(1_000), "1.0K");
+        assert_eq!(format_number(1_500), "1.5K");
+        assert_eq!(format_number(999_999), "1000.0K");
+    }
+
+    #[test]
+    fn format_number_millions() {
+        assert_eq!(format_number(1_000_000), "1.0M");
+        assert_eq!(format_number(2_500_000), "2.5M");
+        assert_eq!(format_number(50_000_000_000), "50000.0M");
+    }
+
+    #[tokio::test]
+    async fn save_search_stores_entry() {
+        let state = AppState::with_base_url("http://unused").unwrap();
+
+        state
+            .save_search(
+                "tokio".to_string(),
+                vec![CrateSummary {
+                    name: "tokio".to_string(),
+                    description: Some("Async runtime".to_string()),
+                    max_version: "1.0.0".to_string(),
+                    downloads: 100,
+                }],
+            )
+            .await;
+
+        let searches = state.recent_searches.read().await;
+        assert_eq!(searches.len(), 1);
+        assert_eq!(searches[0].0, "tokio");
+        assert_eq!(searches[0].1[0].name, "tokio");
+    }
+
+    #[tokio::test]
+    async fn save_search_caps_at_10() {
+        let state = AppState::with_base_url("http://unused").unwrap();
+
+        for i in 0..12 {
+            state.save_search(format!("query-{i}"), Vec::new()).await;
+        }
+
+        let searches = state.recent_searches.read().await;
+        assert_eq!(searches.len(), 10);
+        // Oldest entries should have been evicted
+        assert_eq!(searches[0].0, "query-2");
+        assert_eq!(searches[9].0, "query-11");
     }
 }
