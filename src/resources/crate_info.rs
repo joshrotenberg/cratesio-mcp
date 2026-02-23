@@ -63,3 +63,133 @@ pub fn build(state: Arc<AppState>) -> ResourceTemplate {
             }
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    use tokio::sync::RwLock;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use crate::client::CratesIoClient;
+    use crate::client::docsrs::DocsRsClient;
+    use crate::client::osv::OsvClient;
+    use crate::docs::cache::DocsCache;
+
+    fn test_state(crates_url: &str) -> Arc<AppState> {
+        Arc::new(AppState {
+            client: CratesIoClient::with_base_url("test", Duration::from_millis(0), crates_url)
+                .unwrap(),
+            docsrs_client: DocsRsClient::new("test").unwrap(),
+            osv_client: OsvClient::new("test").unwrap(),
+            docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
+            recent_searches: RwLock::new(Vec::new()),
+        })
+    }
+
+    const GET_CRATE_JSON: &str = r#"{
+        "crate": {
+            "name": "tower-mcp",
+            "updated_at": "2026-02-11T13:21:51.089324Z",
+            "keywords": [],
+            "categories": [],
+            "created_at": "2026-01-28T16:29:05.281129Z",
+            "downloads": 1721,
+            "recent_downloads": 1721,
+            "max_version": "0.6.0",
+            "max_stable_version": "0.6.0",
+            "description": "Tower-native MCP implementation",
+            "documentation": "https://docs.rs/tower-mcp",
+            "repository": "https://github.com/joshrotenberg/tower-mcp"
+        },
+        "versions": []
+    }"#;
+
+    #[tokio::test]
+    async fn crate_info_resource_returns_content() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/tower-mcp"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_raw(GET_CRATE_JSON, "application/json"),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let state = test_state(&server.uri());
+        let template = build(state);
+
+        let vars = HashMap::from([("name".to_string(), "tower-mcp".to_string())]);
+        let result = template
+            .read("crates://tower-mcp/info", vars)
+            .await
+            .unwrap();
+
+        assert_eq!(result.contents.len(), 1);
+        assert_eq!(result.contents[0].uri, "crates://tower-mcp/info");
+        assert_eq!(
+            result.contents[0].mime_type.as_deref(),
+            Some("text/markdown")
+        );
+        let text = result.contents[0].text.as_deref().unwrap();
+        assert!(text.contains("# tower-mcp"));
+        assert!(text.contains("Tower-native MCP implementation"));
+        assert!(text.contains("**Version:** 0.6.0"));
+        assert!(text.contains("**Downloads:** 1.7K"));
+        assert!(text.contains("**Repository:**"));
+        assert!(text.contains("**Documentation:**"));
+    }
+
+    #[tokio::test]
+    async fn crate_info_resource_not_found() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/nonexistent"))
+            .respond_with(
+                ResponseTemplate::new(404)
+                    .set_body_raw(r#"{"errors":[{"detail":"Not Found"}]}"#, "application/json"),
+            )
+            .mount(&server)
+            .await;
+
+        let state = test_state(&server.uri());
+        let template = build(state);
+
+        let vars = HashMap::from([("name".to_string(), "nonexistent".to_string())]);
+        let result = template.read("crates://nonexistent/info", vars).await;
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn crate_info_template_definition() {
+        let state = test_state("http://unused");
+        let template = build(state);
+        let def = template.definition();
+
+        assert_eq!(def.uri_template, "crates://{name}/info");
+        assert_eq!(def.name, "Crate Information");
+        assert_eq!(
+            def.description.as_deref(),
+            Some("Get detailed information about a crate by name")
+        );
+        assert_eq!(def.mime_type.as_deref(), Some("text/markdown"));
+    }
+
+    #[test]
+    fn crate_info_template_uri_matching() {
+        let state = test_state("http://unused");
+        let template = build(state);
+
+        let vars = template.match_uri("crates://serde/info").unwrap();
+        assert_eq!(vars.get("name"), Some(&"serde".to_string()));
+
+        assert!(template.match_uri("crates://serde/readme").is_none());
+        assert!(template.match_uri("crates://serde/docs").is_none());
+    }
+}

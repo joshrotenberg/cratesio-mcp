@@ -2,9 +2,6 @@
 //!
 //! These tests exercise the full JSON-RPC pipeline: client request -> router ->
 //! tool/resource/prompt handler -> wiremock mock -> formatted response.
-//!
-//! The 4 docs.rs/OSV tools (get_crate_docs, get_doc_item, search_docs,
-//! audit_dependencies) are excluded since they need different mock setups.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -41,8 +38,11 @@ fn test_router(state: Arc<AppState>) -> McpRouter {
         .tool(tools::version_detail::build(state.clone()))
         .tool(tools::category::build(state.clone()))
         .tool(tools::keyword_detail::build(state.clone()))
+        .tool(tools::features::build(state.clone()))
         .resource(resources::recent_searches::build(state.clone()))
         .resource_template(resources::crate_info::build(state.clone()))
+        .resource_template(resources::readme::build(state.clone()))
+        .resource_template(resources::docs::build(state.clone()))
         .prompt(prompts::analyze::build())
         .prompt(prompts::compare::build())
 }
@@ -253,13 +253,13 @@ async fn mount_get_crate(server: &MockServer) {
 // ── Discovery tests ────────────────────────────────────────────────────────
 
 #[tokio::test]
-async fn list_tools_returns_all_17() {
+async fn list_tools_returns_all_18() {
     let server = MockServer::start().await;
     let mut client = initialized_client(&server).await;
 
     let tools = client.list_tools().await;
 
-    assert_eq!(tools.len(), 17);
+    assert_eq!(tools.len(), 18);
     let names: Vec<&str> = tools
         .iter()
         .filter_map(|t| t.get("name").and_then(|n| n.as_str()))
@@ -281,6 +281,7 @@ async fn list_tools_returns_all_17() {
     assert!(names.contains(&"get_crate_version"));
     assert!(names.contains(&"get_category"));
     assert!(names.contains(&"get_keyword"));
+    assert!(names.contains(&"get_crate_features"));
 }
 
 #[tokio::test]
@@ -308,11 +309,14 @@ async fn list_resource_templates_returns_crate_info() {
         .and_then(|v| v.as_array())
         .expect("expected resourceTemplates array");
 
-    assert_eq!(templates.len(), 1);
-    assert_eq!(
-        templates[0].get("uriTemplate").and_then(|u| u.as_str()),
-        Some("crates://{name}/info")
-    );
+    assert_eq!(templates.len(), 3);
+    let uris: Vec<&str> = templates
+        .iter()
+        .filter_map(|t| t.get("uriTemplate").and_then(|u| u.as_str()))
+        .collect();
+    assert!(uris.contains(&"crates://{name}/info"));
+    assert!(uris.contains(&"crates://{name}/readme"));
+    assert!(uris.contains(&"crates://{name}/docs"));
 }
 
 #[tokio::test]
@@ -725,6 +729,279 @@ async fn tool_get_keyword() {
     let text = result.all_text();
     assert!(text.contains("serde"));
     assert!(text.contains("5000"));
+}
+
+// ── Features tool test ─────────────────────────────────────────────────────
+
+const VERSION_WITH_FEATURES_JSON: &str = r#"{
+    "version": {
+        "num": "0.6.0",
+        "yanked": false,
+        "created_at": "2026-02-11T13:21:51.089324Z",
+        "downloads": 119,
+        "license": "MIT OR Apache-2.0",
+        "rust_version": "1.90",
+        "features": {
+            "default": ["stdio"],
+            "stdio": [],
+            "http": ["dep:hyper", "dep:axum"]
+        }
+    }
+}"#;
+
+#[tokio::test]
+async fn tool_get_crate_features() {
+    let server = MockServer::start().await;
+    mount_get_crate(&server).await;
+
+    Mock::given(method("GET"))
+        .and(path("/crates/tower-mcp/0.6.0"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(VERSION_WITH_FEATURES_JSON, "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    let mut client = initialized_client(&server).await;
+    let result = client
+        .call_tool("get_crate_features", json!({"name": "tower-mcp"}))
+        .await;
+
+    let text = result.first_text().expect("expected text");
+    assert!(text.contains("Feature Flags"));
+    assert!(text.contains("`stdio`"));
+    assert!(text.contains("`http`"));
+    assert!(text.contains("`dep:hyper`"));
+    assert!(text.contains("Default Features"));
+    assert!(text.contains("Total: 3 feature flags"));
+}
+
+#[tokio::test]
+async fn tool_get_crate_features_with_version() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/crates/tower-mcp/0.6.0"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(VERSION_WITH_FEATURES_JSON, "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    let mut client = initialized_client(&server).await;
+    let result = client
+        .call_tool(
+            "get_crate_features",
+            json!({"name": "tower-mcp", "version": "0.6.0"}),
+        )
+        .await;
+
+    let text = result.first_text().expect("expected text");
+    assert!(text.contains("tower-mcp v0.6.0"));
+    assert!(text.contains("Feature Flags"));
+}
+
+// ── Docs.rs / OSV tool tests ──────────────────────────────────────────────
+//
+// These tools need separate mock servers for docs.rs and/or OSV.dev,
+// so they use AppState::with_all_base_urls instead of with_base_url.
+
+fn full_test_state(
+    crates_server: &MockServer,
+    docsrs_server: &MockServer,
+    osv_server: &MockServer,
+) -> Arc<AppState> {
+    Arc::new(
+        AppState::with_all_base_urls(
+            &crates_server.uri(),
+            &docsrs_server.uri(),
+            &osv_server.uri(),
+        )
+        .expect("failed to create test state"),
+    )
+}
+
+fn full_test_router(state: Arc<AppState>) -> McpRouter {
+    McpRouter::new()
+        .server_info("cratesio-mcp", "0.1.0")
+        .tool(tools::crate_docs::build(state.clone()))
+        .tool(tools::doc_item::build(state.clone()))
+        .tool(tools::search_docs::build(state.clone()))
+        .tool(tools::audit::build(state.clone()))
+}
+
+async fn full_initialized_client(
+    crates_server: &MockServer,
+    docsrs_server: &MockServer,
+    osv_server: &MockServer,
+) -> TestClient {
+    let state = full_test_state(crates_server, docsrs_server, osv_server);
+    let router = full_test_router(state);
+    let mut client = TestClient::from_router(router);
+    client.initialize().await;
+    client
+}
+
+/// Minimal valid rustdoc JSON for testing.
+fn synthetic_crate_json() -> Vec<u8> {
+    let json = serde_json::json!({
+        "root": 0,
+        "crate_version": "1.0.0",
+        "includes_private": false,
+        "index": {},
+        "paths": {},
+        "external_crates": {},
+        "target": {
+            "triple": "x86_64-unknown-linux-gnu",
+            "target_features": []
+        },
+        "format_version": rustdoc_types::FORMAT_VERSION
+    });
+    serde_json::to_vec(&json).unwrap()
+}
+
+#[tokio::test]
+async fn tool_get_crate_docs() {
+    let crates_server = MockServer::start().await;
+    let docsrs_server = MockServer::start().await;
+    let osv_server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/crate/serde/latest/json.gz"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_bytes(synthetic_crate_json())
+                .insert_header("content-type", "application/json"),
+        )
+        .mount(&docsrs_server)
+        .await;
+
+    let mut client = full_initialized_client(&crates_server, &docsrs_server, &osv_server).await;
+    let result = client
+        .call_tool("get_crate_docs", json!({"name": "serde"}))
+        .await;
+
+    let text = result.first_text().expect("expected text");
+    // Synthetic crate has empty index, so output should reflect that
+    assert!(!text.is_empty());
+}
+
+#[tokio::test]
+async fn tool_get_crate_docs_not_found() {
+    let crates_server = MockServer::start().await;
+    let docsrs_server = MockServer::start().await;
+    let osv_server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/crate/nonexistent/latest/json.gz"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&docsrs_server)
+        .await;
+
+    let mut client = full_initialized_client(&crates_server, &docsrs_server, &osv_server).await;
+    let result = client
+        .call_tool("get_crate_docs", json!({"name": "nonexistent"}))
+        .await;
+
+    assert!(result.is_error);
+}
+
+#[tokio::test]
+async fn tool_search_docs() {
+    let crates_server = MockServer::start().await;
+    let docsrs_server = MockServer::start().await;
+    let osv_server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/crate/serde/latest/json.gz"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_bytes(synthetic_crate_json())
+                .insert_header("content-type", "application/json"),
+        )
+        .mount(&docsrs_server)
+        .await;
+
+    let mut client = full_initialized_client(&crates_server, &docsrs_server, &osv_server).await;
+    let result = client
+        .call_tool(
+            "search_docs",
+            json!({"name": "serde", "query": "Serialize"}),
+        )
+        .await;
+
+    let text = result.first_text().expect("expected text");
+    // Empty index means no matches, but should not error
+    assert!(text.contains("No items matching"));
+}
+
+#[tokio::test]
+async fn tool_get_doc_item_not_found() {
+    let crates_server = MockServer::start().await;
+    let docsrs_server = MockServer::start().await;
+    let osv_server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/crate/serde/latest/json.gz"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_bytes(synthetic_crate_json())
+                .insert_header("content-type", "application/json"),
+        )
+        .mount(&docsrs_server)
+        .await;
+
+    let mut client = full_initialized_client(&crates_server, &docsrs_server, &osv_server).await;
+    let result = client
+        .call_tool(
+            "get_doc_item",
+            json!({"name": "serde", "item_path": "Serialize"}),
+        )
+        .await;
+
+    // Item not in synthetic index, so should be an error
+    assert!(result.is_error);
+}
+
+#[tokio::test]
+async fn tool_audit_dependencies_clean() {
+    let crates_server = MockServer::start().await;
+    let docsrs_server = MockServer::start().await;
+    let osv_server = MockServer::start().await;
+
+    // Mount crate info mock
+    Mock::given(method("GET"))
+        .and(path("/crates/tower-mcp"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(GET_CRATE_JSON, "application/json"))
+        .mount(&crates_server)
+        .await;
+
+    // Mount dependencies mock
+    Mock::given(method("GET"))
+        .and(path("/crates/tower-mcp/0.6.0/dependencies"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(DEPENDENCIES_JSON, "application/json"),
+        )
+        .mount(&crates_server)
+        .await;
+
+    // Mount OSV query mock (no vulns for any package)
+    Mock::given(method("POST"))
+        .and(path("/query"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"vulns": []})))
+        .mount(&osv_server)
+        .await;
+
+    let mut client = full_initialized_client(&crates_server, &docsrs_server, &osv_server).await;
+    let result = client
+        .call_tool("audit_dependencies", json!({"name": "tower-mcp"}))
+        .await;
+
+    let text = result.first_text().expect("expected text");
+    assert!(text.contains("Security Audit: tower-mcp v0.6.0"));
+    assert!(text.contains("No known vulnerabilities found"));
+    assert!(text.contains("**Dependencies checked**"));
+    assert!(text.contains("**Vulnerabilities found**: 0"));
 }
 
 // ── Resource tests ─────────────────────────────────────────────────────────
