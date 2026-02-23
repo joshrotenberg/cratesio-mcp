@@ -2,6 +2,7 @@
 //!
 //! Each tool corresponds to a crates.io API endpoint.
 
+pub mod audit;
 pub mod authors;
 pub mod categories;
 pub mod category;

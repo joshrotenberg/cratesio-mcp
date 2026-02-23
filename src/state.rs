@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use crate::client::CratesIoClient;
 use crate::client::docsrs::DocsRsClient;
+use crate::client::osv::OsvClient;
 use crate::docs::cache::DocsCache;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -23,6 +24,8 @@ pub struct AppState {
     pub client: CratesIoClient,
     /// docs.rs API client for rustdoc JSON
     pub docsrs_client: DocsRsClient,
+    /// OSV.dev API client for vulnerability lookups
+    pub osv_client: OsvClient,
     /// Cache for parsed rustdoc JSON
     pub docs_cache: DocsCache,
     /// Recent search queries (exposed as a resource)
@@ -46,11 +49,14 @@ impl AppState {
             .map_err(|e| format!("Failed to create crates.io client: {e}"))?;
         let docsrs_client = DocsRsClient::new(user_agent)
             .map_err(|e| format!("Failed to create docs.rs client: {e}"))?;
+        let osv_client =
+            OsvClient::new(user_agent).map_err(|e| format!("Failed to create OSV client: {e}"))?;
         let docs_cache = DocsCache::new(docs_cache_max_entries, docs_cache_ttl);
 
         Ok(Self {
             client,
             docsrs_client,
+            osv_client,
             docs_cache,
             recent_searches: RwLock::new(Vec::new()),
         })
