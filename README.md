@@ -6,7 +6,7 @@ Built with [tower-mcp](https://github.com/joshrotenberg/tower-mcp).
 
 ## Features
 
-### Tools (17)
+### Tools (20)
 
 | Tool | Description | Status |
 |------|-------------|--------|
@@ -27,7 +27,9 @@ Built with [tower-mcp](https://github.com/joshrotenberg/tower-mcp).
 | `get_keyword` | Details for a specific keyword | Implemented |
 | `get_version_downloads` | Daily download stats for a specific version | Implemented |
 | `get_crate_version` | Detailed metadata for a specific version | Implemented |
-| `get_crate_docs` | Fetch rendered docs from docs.rs | [Planned (#2)](https://github.com/joshrotenberg/cratesio-mcp/issues/2) |
+| `get_crate_docs` | Browse crate documentation structure from docs.rs | Implemented |
+| `get_doc_item` | Get full docs for a specific item (fn, struct, trait) | Implemented |
+| `search_docs` | Search for items by name within a crate's docs | Implemented |
 | `audit_dependencies` | Check deps against RustSec advisory DB | [Planned (#7)](https://github.com/joshrotenberg/cratesio-mcp/issues/7) |
 
 ### Resources (2)
@@ -95,17 +97,19 @@ cratesio-mcp --transport http --port 3000
 
 ```text
 Options:
-  -t, --transport <TRANSPORT>      Transport: stdio or http [default: stdio]
-      --max-concurrent <N>         Max concurrent requests [default: 10]
-      --rate-limit-ms <MS>         Rate limit interval in ms [default: 1000]
-  -l, --log-level <LEVEL>          Log level [default: info]
-      --host <HOST>                HTTP bind address [default: 127.0.0.1]
-  -p, --port <PORT>                HTTP port [default: 3000]
-      --request-timeout-secs <S>   Request timeout [default: 30]
-      --minimal                    Tools only (no prompts/resources/completions)
-      --cache-enabled              Enable response caching [default: true]
-      --cache-ttl-secs <S>         Cache TTL [default: 300]
-      --cache-max-size <N>         Max cached responses [default: 200]
+  -t, --transport <TRANSPORT>              Transport: stdio or http [default: stdio]
+      --max-concurrent <N>                 Max concurrent requests [default: 10]
+      --rate-limit-ms <MS>                 Rate limit interval in ms [default: 1000]
+  -l, --log-level <LEVEL>                  Log level [default: info]
+      --host <HOST>                        HTTP bind address [default: 127.0.0.1]
+  -p, --port <PORT>                        HTTP port [default: 3000]
+      --request-timeout-secs <S>           Request timeout [default: 30]
+      --minimal                            Tools only (no prompts/resources/completions)
+      --cache-enabled                      Enable response caching [default: true]
+      --cache-ttl-secs <S>                 Cache TTL [default: 300]
+      --cache-max-size <N>                 Max cached responses [default: 200]
+      --docs-cache-max-entries <N>         Max cached docs.rs entries [default: 10]
+      --docs-cache-ttl-secs <S>            docs.rs cache TTL [default: 3600]
 ```
 
 ## MCP client configuration
@@ -164,11 +168,11 @@ The client covers 46 endpoints across crates, versions, owners, categories, keyw
 
 - [x] Custom crates.io API client (46 endpoints)
 - [x] Library crate extraction
-- [x] 17 MCP tools
+- [x] 20 MCP tools
 - [x] Resources, prompts, and completions
 - [x] Tower middleware stack (timeout, rate limit, bulkhead, cache)
 - [x] stdio and HTTP transports
-- [ ] docs.rs integration ([#2](https://github.com/joshrotenberg/cratesio-mcp/issues/2))
+- [x] docs.rs integration ([#2](https://github.com/joshrotenberg/cratesio-mcp/issues/2))
 - [ ] Dependency security audit via RustSec ([#7](https://github.com/joshrotenberg/cratesio-mcp/issues/7))
 - [ ] CI pipeline ([#5](https://github.com/joshrotenberg/cratesio-mcp/issues/5))
 - [ ] Publish to crates.io ([#4](https://github.com/joshrotenberg/cratesio-mcp/issues/4))

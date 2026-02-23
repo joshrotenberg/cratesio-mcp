@@ -69,6 +69,14 @@ struct Args {
     /// Maximum number of cached responses
     #[arg(long, default_value = "200")]
     cache_max_size: usize,
+
+    /// Maximum number of cached docs.rs rustdoc JSON entries
+    #[arg(long, default_value = "10")]
+    docs_cache_max_entries: usize,
+
+    /// TTL for cached docs.rs rustdoc JSON entries (in seconds)
+    #[arg(long, default_value = "3600")]
+    docs_cache_ttl_secs: u64,
 }
 
 #[tokio::main]
@@ -94,8 +102,11 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
 
     // Create shared state with rate limiting for crates.io API
     let rate_limit = Duration::from_millis(args.rate_limit_ms);
-    let state =
-        Arc::new(AppState::new(rate_limit).map_err(|e| format!("Failed to create state: {}", e))?);
+    let docs_cache_ttl = Duration::from_secs(args.docs_cache_ttl_secs);
+    let state = Arc::new(
+        AppState::new(rate_limit, args.docs_cache_max_entries, docs_cache_ttl)
+            .map_err(|e| format!("Failed to create state: {}", e))?,
+    );
 
     // Build all tools
     let search_tool = tools::search::build(state.clone());
@@ -115,6 +126,9 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
     let version_detail_tool = tools::version_detail::build(state.clone());
     let category_tool = tools::category::build(state.clone());
     let keyword_detail_tool = tools::keyword_detail::build(state.clone());
+    let get_crate_docs_tool = tools::get_crate_docs::build(state.clone());
+    let get_doc_item_tool = tools::get_doc_item::build(state.clone());
+    let search_docs_tool = tools::search_docs::build(state.clone());
 
     // Create base router with tools (always registered)
     let instructions = if args.minimal {
@@ -136,7 +150,10 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - get_version_downloads: Daily download stats for a specific version\n\
          - get_crate_version: Detailed metadata for a specific version\n\
          - get_category: Details about a specific category\n\
-         - get_keyword: Details about a specific keyword\n\n\
+         - get_keyword: Details about a specific keyword\n\
+         - get_crate_docs: Browse crate documentation structure from docs.rs\n\
+         - get_doc_item: Get full documentation for a specific item from docs.rs\n\
+         - search_docs: Search for items by name within a crate's docs\n\n\
          (Running in minimal mode - resources, prompts, and completions disabled)"
     } else {
         "MCP server for querying crates.io - the Rust package registry.\n\n\
@@ -157,7 +174,10 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - get_version_downloads: Daily download stats for a specific version\n\
          - get_crate_version: Detailed metadata for a specific version\n\
          - get_category: Details about a specific category\n\
-         - get_keyword: Details about a specific keyword\n\n\
+         - get_keyword: Details about a specific keyword\n\
+         - get_crate_docs: Browse crate documentation structure from docs.rs\n\
+         - get_doc_item: Get full documentation for a specific item from docs.rs\n\
+         - search_docs: Search for items by name within a crate's docs\n\n\
          Resources:\n\
          - crates://{name}/info: Get crate info as a resource\n\n\
          Use the prompts for guided analysis:\n\
@@ -184,7 +204,10 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
         .tool(version_downloads_tool)
         .tool(version_detail_tool)
         .tool(category_tool)
-        .tool(keyword_detail_tool);
+        .tool(keyword_detail_tool)
+        .tool(get_crate_docs_tool)
+        .tool(get_doc_item_tool)
+        .tool(search_docs_tool);
 
     // Add resources, prompts, and completions unless in minimal mode
     // Minimal mode works around Claude Code MCP tool discovery issues
