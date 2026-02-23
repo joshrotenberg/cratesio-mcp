@@ -1,6 +1,8 @@
 //! docs.rs API client for fetching rustdoc JSON.
 
+use flate2::read::GzDecoder;
 use rustdoc_types::Crate;
+use std::io::Read;
 
 /// Errors from the docs.rs client.
 #[derive(Debug, thiserror::Error)]
@@ -18,6 +20,13 @@ pub enum DocsRsError {
         "rustdoc JSON not available for {name} v{version} (requires docs.rs builds after 2025-05-23)"
     )]
     DocsNotAvailable { name: String, version: String },
+
+    /// Failed to decompress gzip response from docs.rs.
+    #[error("failed to decompress rustdoc JSON for {name}: {source}")]
+    Decompress {
+        name: String,
+        source: std::io::Error,
+    },
 
     /// Failed to parse the rustdoc JSON.
     #[error("failed to parse rustdoc JSON for {name}: {source}")]
@@ -77,7 +86,25 @@ impl DocsRsClient {
         }
 
         let bytes = resp.bytes().await?;
-        serde_json::from_slice(&bytes).map_err(|source| DocsRsError::Parse {
+
+        // docs.rs serves rustdoc JSON with Content-Type: application/gzip,
+        // which reqwest does not auto-decompress (it only handles
+        // Content-Encoding: gzip). Decompress manually.
+        let json_bytes = if bytes.starts_with(&[0x1f, 0x8b]) {
+            let mut decoder = GzDecoder::new(&bytes[..]);
+            let mut decompressed = Vec::new();
+            decoder
+                .read_to_end(&mut decompressed)
+                .map_err(|source| DocsRsError::Decompress {
+                    name: name.to_string(),
+                    source,
+                })?;
+            decompressed
+        } else {
+            bytes.to_vec()
+        };
+
+        serde_json::from_slice(&json_bytes).map_err(|source| DocsRsError::Parse {
             name: name.to_string(),
             source,
         })
@@ -108,8 +135,36 @@ mod tests {
         serde_json::to_vec(&json).unwrap()
     }
 
+    fn gzip_compress(data: &[u8]) -> Vec<u8> {
+        use flate2::Compression;
+        use flate2::write::GzEncoder;
+        use std::io::Write;
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(data).unwrap();
+        encoder.finish().unwrap()
+    }
+
     #[tokio::test]
-    async fn fetch_rustdoc_success() {
+    async fn fetch_rustdoc_gzip_response() {
+        let server = MockServer::start().await;
+        let compressed = gzip_compress(&synthetic_crate_json());
+        Mock::given(method("GET"))
+            .and(path("/crate/serde/latest/json.gz"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_bytes(compressed)
+                    .insert_header("content-type", "application/gzip"),
+            )
+            .mount(&server)
+            .await;
+
+        let client = DocsRsClient::with_base_url("test", &server.uri()).unwrap();
+        let krate = client.fetch_rustdoc("serde", "latest").await.unwrap();
+        assert_eq!(krate.crate_version.as_deref(), Some("1.0.0"));
+    }
+
+    #[tokio::test]
+    async fn fetch_rustdoc_plain_json_response() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/crate/serde/latest/json.gz"))
