@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "cratesio-mcp": {
+      "command": "cargo",
+      "args": ["run", "--", "--transport", "stdio"]
+    }
+  }
+}
