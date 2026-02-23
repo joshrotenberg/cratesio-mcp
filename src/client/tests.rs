@@ -41,7 +41,12 @@ const GET_CRATE_JSON: &str = r#"{
             "created_at": "2026-02-11T13:21:51.089324Z",
             "downloads": 119,
             "license": "MIT OR Apache-2.0",
-            "rust_version": "1.90"
+            "rust_version": "1.90",
+            "features": {
+                "default": ["stdio"],
+                "stdio": [],
+                "http": ["dep:hyper", "dep:axum"]
+            }
         },
         {
             "num": "0.5.0",
@@ -49,7 +54,11 @@ const GET_CRATE_JSON: &str = r#"{
             "created_at": "2026-02-06T01:00:00.000000Z",
             "downloads": 502,
             "license": "MIT OR Apache-2.0",
-            "rust_version": "1.85"
+            "rust_version": "1.85",
+            "features": {
+                "default": [],
+                "serde": ["dep:serde"]
+            }
         }
     ]
 }"#;
@@ -83,7 +92,18 @@ async fn get_crate_parses_response() {
     assert_eq!(resp.versions[0].num, "0.6.0");
     assert!(!resp.versions[0].yanked);
     assert_eq!(resp.versions[0].downloads, 119);
+    assert_eq!(resp.versions[0].features.len(), 3);
+    assert_eq!(
+        resp.versions[0].features["default"],
+        vec!["stdio".to_string()]
+    );
+    assert_eq!(
+        resp.versions[0].features["http"],
+        vec!["dep:hyper".to_string(), "dep:axum".to_string()]
+    );
+    assert!(resp.versions[0].features["stdio"].is_empty());
     assert_eq!(resp.versions[1].num, "0.5.0");
+    assert_eq!(resp.versions[1].features.len(), 2);
 }
 
 #[tokio::test]
@@ -297,7 +317,12 @@ const VERSIONS_PAGE_JSON: &str = r#"{
             "created_at": "2026-02-11T13:21:51.089324Z",
             "downloads": 119,
             "license": "MIT OR Apache-2.0",
-            "rust_version": "1.90"
+            "rust_version": "1.90",
+            "features": {
+                "default": ["stdio"],
+                "stdio": [],
+                "http": ["dep:hyper", "dep:axum"]
+            }
         },
         {
             "num": "0.5.0",
@@ -334,8 +359,15 @@ async fn crate_versions_parses_response() {
     assert_eq!(page.versions[0].num, "0.6.0");
     assert_eq!(page.versions[0].downloads, 119);
     assert_eq!(page.versions[0].rust_version.as_deref(), Some("1.90"));
+    assert_eq!(page.versions[0].features.len(), 3);
+    assert_eq!(
+        page.versions[0].features["default"],
+        vec!["stdio".to_string()]
+    );
     assert_eq!(page.versions[1].num, "0.5.0");
     assert!(page.versions[1].rust_version.is_none());
+    // v0.5.0 has no "features" key in JSON -- serde(default) gives empty map.
+    assert!(page.versions[1].features.is_empty());
 }
 
 // ── crate_version ──────────────────────────────────────────────────────────
@@ -347,7 +379,12 @@ const VERSION_JSON: &str = r#"{
         "created_at": "2026-02-11T13:21:51.089324Z",
         "downloads": 119,
         "license": "MIT OR Apache-2.0",
-        "rust_version": "1.90"
+        "rust_version": "1.90",
+        "features": {
+            "default": ["stdio"],
+            "stdio": [],
+            "http": ["dep:hyper", "dep:axum"]
+        }
     }
 }"#;
 
@@ -370,6 +407,38 @@ async fn crate_version_parses_response() {
     assert_eq!(version.downloads, 119);
     assert_eq!(version.license.as_deref(), Some("MIT OR Apache-2.0"));
     assert_eq!(version.rust_version.as_deref(), Some("1.90"));
+    assert_eq!(version.features.len(), 3);
+    assert_eq!(version.features["default"], vec!["stdio".to_string()]);
+    assert!(version.features["stdio"].is_empty());
+    assert_eq!(
+        version.features["http"],
+        vec!["dep:hyper".to_string(), "dep:axum".to_string()]
+    );
+}
+
+// ── crate_features ────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn crate_features_returns_feature_map() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/crates/tower-mcp/0.6.0"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(VERSION_JSON, "application/json"))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri());
+    let features = client.crate_features("tower-mcp", "0.6.0").await.unwrap();
+
+    assert_eq!(features.len(), 3);
+    assert_eq!(features["default"], vec!["stdio".to_string()]);
+    assert!(features["stdio"].is_empty());
+    assert_eq!(
+        features["http"],
+        vec!["dep:hyper".to_string(), "dep:axum".to_string()]
+    );
 }
 
 // ── crate_dependencies ─────────────────────────────────────────────────────
