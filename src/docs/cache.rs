@@ -112,7 +112,7 @@ mod tests {
                 "triple": "x86_64-unknown-linux-gnu",
                 "target_features": []
             },
-            "format_version": 39
+            "format_version": rustdoc_types::FORMAT_VERSION
         });
         serde_json::from_value(json).unwrap()
     }

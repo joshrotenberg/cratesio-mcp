@@ -34,6 +34,25 @@ pub enum DocsRsError {
         name: String,
         source: serde_json::Error,
     },
+
+    /// Rustdoc JSON format version mismatch caused a parse failure.
+    #[error(
+        "failed to parse rustdoc JSON for {name}: docs.rs serves format v{actual} \
+         but cratesio-mcp supports v{expected} -- consider updating the rustdoc-types dependency: {source}"
+    )]
+    FormatMismatch {
+        name: String,
+        expected: u32,
+        actual: u32,
+        source: serde_json::Error,
+    },
+}
+
+/// Minimal struct to extract just the format version from rustdoc JSON.
+#[derive(serde::Deserialize)]
+#[allow(dead_code)]
+struct FormatVersionCheck {
+    format_version: u32,
 }
 
 /// HTTP client for the docs.rs rustdoc JSON API.
@@ -104,9 +123,50 @@ impl DocsRsClient {
             bytes.to_vec()
         };
 
-        serde_json::from_slice(&json_bytes).map_err(|source| DocsRsError::Parse {
-            name: name.to_string(),
-            source,
+        // Pre-check format version before full deserialization.
+        let actual_version = serde_json::from_slice::<FormatVersionCheck>(&json_bytes)
+            .ok()
+            .map(|c| c.format_version);
+
+        let expected = rustdoc_types::FORMAT_VERSION;
+        if let Some(actual) = actual_version
+            && actual != expected
+        {
+            let diff = actual.abs_diff(expected);
+            if diff <= 2 {
+                tracing::warn!(
+                    crate_name = name,
+                    expected = expected,
+                    actual = actual,
+                    "rustdoc JSON format version mismatch (close): \
+                     docs.rs serves v{actual}, we support v{expected}"
+                );
+            } else {
+                tracing::warn!(
+                    crate_name = name,
+                    expected = expected,
+                    actual = actual,
+                    "rustdoc JSON format version mismatch (far): \
+                     docs.rs serves v{actual}, we support v{expected}"
+                );
+            }
+        }
+
+        serde_json::from_slice(&json_bytes).map_err(|source| {
+            if let Some(actual) = actual_version
+                && actual != expected
+            {
+                return DocsRsError::FormatMismatch {
+                    name: name.to_string(),
+                    expected,
+                    actual,
+                    source,
+                };
+            }
+            DocsRsError::Parse {
+                name: name.to_string(),
+                source,
+            }
         })
     }
 }
@@ -118,7 +178,10 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn synthetic_crate_json() -> Vec<u8> {
-        // Minimal valid rustdoc JSON (format version 39 / rustdoc-types 0.57)
+        synthetic_crate_json_with_version(rustdoc_types::FORMAT_VERSION)
+    }
+
+    fn synthetic_crate_json_with_version(format_version: u32) -> Vec<u8> {
         let json = serde_json::json!({
             "root": 0,
             "crate_version": "1.0.0",
@@ -130,7 +193,7 @@ mod tests {
                 "triple": "x86_64-unknown-linux-gnu",
                 "target_features": []
             },
-            "format_version": 39
+            "format_version": format_version
         });
         serde_json::to_vec(&json).unwrap()
     }
@@ -228,5 +291,71 @@ mod tests {
         let client = DocsRsClient::with_base_url("test", &server.uri()).unwrap();
         let err = client.fetch_rustdoc("bad", "latest").await.unwrap_err();
         assert!(matches!(err, DocsRsError::Parse { .. }));
+    }
+
+    #[tokio::test]
+    async fn fetch_rustdoc_format_mismatch_warning() {
+        // Serve JSON with a different (but structurally compatible) format version.
+        // Parsing should still succeed, but a warning is logged.
+        let mismatched_version = rustdoc_types::FORMAT_VERSION + 1;
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/crate/testcrate/latest/json.gz"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_bytes(synthetic_crate_json_with_version(mismatched_version))
+                    .insert_header("content-type", "application/json"),
+            )
+            .mount(&server)
+            .await;
+
+        let client = DocsRsClient::with_base_url("test", &server.uri()).unwrap();
+        // Should succeed despite version mismatch (structure is compatible)
+        let krate = client.fetch_rustdoc("testcrate", "latest").await.unwrap();
+        assert_eq!(krate.crate_version.as_deref(), Some("1.0.0"));
+    }
+
+    #[tokio::test]
+    async fn fetch_rustdoc_format_mismatch_error() {
+        // Serve JSON with mismatched format version AND invalid structure.
+        // The error should be FormatMismatch with version info.
+        let mismatched_version = rustdoc_types::FORMAT_VERSION + 5;
+        let json = serde_json::json!({
+            "root": 0,
+            "format_version": mismatched_version,
+            "invalid_field": true
+        });
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/crate/badcrate/latest/json.gz"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_bytes(serde_json::to_vec(&json).unwrap())
+                    .insert_header("content-type", "application/json"),
+            )
+            .mount(&server)
+            .await;
+
+        let client = DocsRsClient::with_base_url("test", &server.uri()).unwrap();
+        let err = client
+            .fetch_rustdoc("badcrate", "latest")
+            .await
+            .unwrap_err();
+        match &err {
+            DocsRsError::FormatMismatch {
+                name,
+                expected,
+                actual,
+                ..
+            } => {
+                assert_eq!(name, "badcrate");
+                assert_eq!(*expected, rustdoc_types::FORMAT_VERSION);
+                assert_eq!(*actual, mismatched_version);
+            }
+            other => panic!("expected FormatMismatch, got: {other}"),
+        }
+        let msg = err.to_string();
+        assert!(msg.contains("format v"));
+        assert!(msg.contains("consider updating the rustdoc-types dependency"));
     }
 }
