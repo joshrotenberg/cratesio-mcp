@@ -182,7 +182,9 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - search_docs: Search for items by name within a crate's docs\n\
          - audit_dependencies: Check deps against OSV.dev vulnerability database\n\n\
          Resources:\n\
-         - crates://{name}/info: Get crate info as a resource\n\n\
+         - crates://{name}/info: Get crate info as a resource\n\
+         - crates://{name}/readme: Get README content for a crate\n\
+         - crates://{name}/docs: Get documentation structure for a crate\n\n\
          Use the prompts for guided analysis:\n\
          - analyze_crate: Comprehensive crate analysis\n\
          - compare_crates: Compare multiple crates"
@@ -220,6 +222,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
         // Build resources
         let recent_searches = resources::recent_searches::build(state.clone());
         let crate_info_template = resources::crate_info::build(state.clone());
+        let readme_template = resources::readme::build(state.clone());
+        let docs_template = resources::docs::build(state.clone());
 
         // Build prompts
         let analyze_prompt = prompts::analyze::build();
@@ -265,6 +269,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
         router = router
             .resource(recent_searches)
             .resource_template(crate_info_template)
+            .resource_template(readme_template)
+            .resource_template(docs_template)
             .prompt(analyze_prompt)
             .prompt(compare_prompt)
             // Completion handler for crate name suggestions
