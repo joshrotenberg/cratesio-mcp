@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crates_io_api::AsyncClient;
+use crate::client::CratesIoClient;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -18,7 +18,7 @@ pub struct CrateSummary {
 /// Shared state for the MCP server
 pub struct AppState {
     /// Crates.io API client (already rate-limited internally)
-    pub client: AsyncClient,
+    pub client: CratesIoClient,
     /// Recent search queries (exposed as a resource)
     pub recent_searches: RwLock<Vec<(String, Vec<CrateSummary>)>>,
 }
@@ -29,10 +29,11 @@ impl AppState {
     /// # Arguments
     /// * `rate_limit` - Minimum interval between crates.io API calls
     pub fn new(rate_limit: Duration) -> Result<Self, tower_mcp::BoxError> {
-        let client = AsyncClient::new(
+        let client = CratesIoClient::new(
             "cratesio-mcp (https://github.com/joshrotenberg/cratesio-mcp)",
             rate_limit,
-        )?;
+        )
+        .map_err(|e| format!("Failed to create crates.io client: {e}"))?;
 
         Ok(Self {
             client,
