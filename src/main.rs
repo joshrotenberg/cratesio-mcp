@@ -131,6 +131,7 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
     let search_docs_tool = tools::search_docs::build(state.clone());
     let audit_tool = tools::audit::build(state.clone());
     let features_tool = tools::features::build(state.clone());
+    let user_stats_tool = tools::user_stats::build(state.clone());
 
     // Create base router with tools (always registered)
     let instructions = if args.minimal {
@@ -157,7 +158,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - get_doc_item: Get full documentation for a specific item from docs.rs\n\
          - search_docs: Search for items by name within a crate's docs\n\
          - audit_dependencies: Check deps against OSV.dev vulnerability database\n\
-         - get_crate_features: Get feature flags for a crate version\n\n\
+         - get_crate_features: Get feature flags for a crate version\n\
+         - get_user_stats: Get download statistics for a crates.io user\n\n\
          (Running in minimal mode - resources, prompts, and completions disabled)"
     } else {
         "MCP server for querying crates.io - the Rust package registry.\n\n\
@@ -183,7 +185,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - get_doc_item: Get full documentation for a specific item from docs.rs\n\
          - search_docs: Search for items by name within a crate's docs\n\
          - audit_dependencies: Check deps against OSV.dev vulnerability database\n\
-         - get_crate_features: Get feature flags for a crate version\n\n\
+         - get_crate_features: Get feature flags for a crate version\n\
+         - get_user_stats: Get download statistics for a crates.io user\n\n\
          Resources:\n\
          - crates://{name}/info: Get crate info as a resource\n\
          - crates://{name}/readme: Get README content for a crate\n\
@@ -217,7 +220,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
         .tool(get_doc_item_tool)
         .tool(search_docs_tool)
         .tool(audit_tool)
-        .tool(features_tool);
+        .tool(features_tool)
+        .tool(user_stats_tool);
 
     // Add resources, prompts, and completions unless in minimal mode
     // Minimal mode works around Claude Code MCP tool discovery issues

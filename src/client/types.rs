@@ -63,6 +63,7 @@ pub struct VersionDownloads {
 /// User or team on crates.io.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
+    pub id: u64,
     pub login: String,
     #[serde(default)]
     pub name: Option<String>,
