@@ -62,6 +62,30 @@ impl AppState {
         })
     }
 
+    /// Create application state with a custom crates.io base URL (for testing).
+    ///
+    /// Points the `CratesIoClient` at the given base URL (e.g. wiremock server)
+    /// with zero rate limiting for fast test execution. DocsRs/OSV clients use
+    /// default constructors.
+    pub fn with_base_url(base_url: &str) -> Result<Self, tower_mcp::BoxError> {
+        let user_agent = "cratesio-mcp-test";
+        let client = CratesIoClient::with_base_url(user_agent, Duration::from_millis(0), base_url)
+            .map_err(|e| format!("Failed to create crates.io client: {e}"))?;
+        let docsrs_client = DocsRsClient::new(user_agent)
+            .map_err(|e| format!("Failed to create docs.rs client: {e}"))?;
+        let osv_client =
+            OsvClient::new(user_agent).map_err(|e| format!("Failed to create OSV client: {e}"))?;
+        let docs_cache = DocsCache::new(10, Duration::from_secs(60));
+
+        Ok(Self {
+            client,
+            docsrs_client,
+            osv_client,
+            docs_cache,
+            recent_searches: RwLock::new(Vec::new()),
+        })
+    }
+
     /// Save a search query and its results for the recent searches resource
     pub async fn save_search(&self, query: String, results: Vec<CrateSummary>) {
         let mut searches = self.recent_searches.write().await;
