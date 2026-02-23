@@ -1,5 +1,7 @@
 //! Public data types for the crates.io API.
 
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -45,6 +47,8 @@ pub struct Version {
     pub license: Option<String>,
     #[serde(default)]
     pub rust_version: Option<String>,
+    #[serde(default)]
+    pub features: HashMap<String, Vec<String>>,
 }
 
 /// Per-version download data point.

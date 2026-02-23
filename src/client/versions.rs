@@ -1,5 +1,7 @@
 //! Version-related API endpoints.
 
+use std::collections::HashMap;
+
 use super::CratesIoClient;
 use super::error::Error;
 use super::types::{
@@ -30,6 +32,16 @@ impl CratesIoClient {
     pub async fn crate_version(&self, name: &str, version: &str) -> Result<Version, Error> {
         let resp: VersionResponse = self.get_json(&format!("/crates/{name}/{version}")).await?;
         Ok(resp.version)
+    }
+
+    /// Get the feature flags for a specific crate version.
+    pub async fn crate_features(
+        &self,
+        name: &str,
+        version: &str,
+    ) -> Result<HashMap<String, Vec<String>>, Error> {
+        let v = self.crate_version(name, version).await?;
+        Ok(v.features)
     }
 
     /// Get per-day download data for a specific crate version.
