@@ -1,16 +1,8 @@
-//! Crates.io MCP Server
-//!
-//! An MCP server for querying the crates.io Rust package registry.
-
-mod prompts;
-mod resources;
-mod state;
-mod tools;
-
 use std::sync::Arc;
 use std::time::Duration;
 
 use clap::{Parser, ValueEnum};
+use cratesio_mcp::{prompts, resources, state::AppState, tools};
 use tower::ServiceBuilder;
 use tower::timeout::TimeoutLayer;
 use tower_mcp::protocol::{
@@ -21,8 +13,6 @@ use tower_mcp::{HttpTransport, McpRouter, McpTracingLayer, StdioTransport};
 use tower_resilience::bulkhead::BulkheadLayer;
 use tower_resilience::cache::SharedCacheLayer;
 use tower_resilience::ratelimiter::RateLimiterLayer;
-
-use crate::state::AppState;
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum Transport {
@@ -118,6 +108,13 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
     let summary_tool = tools::summary::build(state.clone());
     let authors_tool = tools::authors::build(state.clone());
     let user_tool = tools::user::build(state.clone());
+    let readme_tool = tools::readme::build(state.clone());
+    let categories_tool = tools::categories::build(state.clone());
+    let keywords_tool = tools::keywords::build(state.clone());
+    let version_downloads_tool = tools::version_downloads::build(state.clone());
+    let version_detail_tool = tools::version_detail::build(state.clone());
+    let category_tool = tools::category::build(state.clone());
+    let keyword_detail_tool = tools::keyword_detail::build(state.clone());
 
     // Create base router with tools (always registered)
     let instructions = if args.minimal {
@@ -126,13 +123,20 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - search_crates: Find crates by name/keywords\n\
          - get_crate_info: Get detailed crate information\n\
          - get_crate_versions: Get version history\n\
+         - get_crate_readme: Get README content for a crate\n\
          - get_dependencies: Get dependencies for a version\n\
          - get_reverse_dependencies: Find crates that depend on this crate\n\
          - get_downloads: Get download statistics\n\
          - get_owners: Get crate owners/maintainers\n\
          - get_summary: Get crates.io global statistics\n\
          - get_crate_authors: Get authors for a crate version\n\
-         - get_user: Get a user's profile\n\n\
+         - get_user: Get a user's profile\n\
+         - get_categories: Browse crates.io categories\n\
+         - get_keywords: Browse crates.io keywords\n\
+         - get_version_downloads: Daily download stats for a specific version\n\
+         - get_crate_version: Detailed metadata for a specific version\n\
+         - get_category: Details about a specific category\n\
+         - get_keyword: Details about a specific keyword\n\n\
          (Running in minimal mode - resources, prompts, and completions disabled)"
     } else {
         "MCP server for querying crates.io - the Rust package registry.\n\n\
@@ -140,13 +144,20 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - search_crates: Find crates by name/keywords\n\
          - get_crate_info: Get detailed crate information\n\
          - get_crate_versions: Get version history\n\
+         - get_crate_readme: Get README content for a crate\n\
          - get_dependencies: Get dependencies for a version\n\
          - get_reverse_dependencies: Find crates that depend on this crate\n\
          - get_downloads: Get download statistics\n\
          - get_owners: Get crate owners/maintainers\n\
          - get_summary: Get crates.io global statistics\n\
          - get_crate_authors: Get authors for a crate version\n\
-         - get_user: Get a user's profile\n\n\
+         - get_user: Get a user's profile\n\
+         - get_categories: Browse crates.io categories\n\
+         - get_keywords: Browse crates.io keywords\n\
+         - get_version_downloads: Daily download stats for a specific version\n\
+         - get_crate_version: Detailed metadata for a specific version\n\
+         - get_category: Details about a specific category\n\
+         - get_keyword: Details about a specific keyword\n\n\
          Resources:\n\
          - crates://{name}/info: Get crate info as a resource\n\n\
          Use the prompts for guided analysis:\n\
@@ -166,7 +177,14 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
         .tool(owners_tool)
         .tool(summary_tool)
         .tool(authors_tool)
-        .tool(user_tool);
+        .tool(user_tool)
+        .tool(readme_tool)
+        .tool(categories_tool)
+        .tool(keywords_tool)
+        .tool(version_downloads_tool)
+        .tool(version_detail_tool)
+        .tool(category_tool)
+        .tool(keyword_detail_tool);
 
     // Add resources, prompts, and completions unless in minimal mode
     // Minimal mode works around Claude Code MCP tool discovery issues

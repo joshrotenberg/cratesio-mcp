@@ -9,6 +9,10 @@ repository = "https://github.com/joshrotenberg/cratesio-mcp"
 keywords = ["mcp", "crates-io", "rust", "tower"]
 categories = ["development-tools", "web-programming"]
 
+[lib]
+name = "cratesio_mcp"
+path = "src/lib.rs"
+
 [[bin]]
 name = "cratesio-mcp"
 path = "src/main.rs"
@@ -17,8 +21,10 @@ path = "src/main.rs"
 # Core MCP
 tower-mcp = { version = "0.6", features = ["http"] }
 
-# Crates.io API client
-crates_io_api = "0.12"
+# HTTP client for crates.io API
+reqwest = { version = "0.12", features = ["json"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
@@ -41,3 +47,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tower = { version = "0.5", features = ["util", "timeout", "limit"] }
 # 0.7.1 adds SharedCacheLayer for cross-session cache sharing
 tower-resilience = { version = "0.7.1", default-features = false, features = ["bulkhead", "ratelimiter", "cache"] }
+
+[dev-dependencies]
+wiremock = "0.6"

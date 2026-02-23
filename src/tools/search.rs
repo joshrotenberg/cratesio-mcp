@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crates_io_api::{CratesQuery, Sort};
+use crate::client::{CratesQuery, Sort};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use tower_mcp::{
