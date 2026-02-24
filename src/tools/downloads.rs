@@ -46,6 +46,13 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     format_number(total)
                 ));
 
+                // Build version ID -> version string map
+                let version_names: HashMap<u64, &str> = response
+                    .versions
+                    .iter()
+                    .map(|v| (v.id, v.num.as_str()))
+                    .collect();
+
                 // Show per-version breakdown
                 output.push_str("## By Version\n\n");
                 let mut version_totals: HashMap<u64, u64> = HashMap::new();
@@ -57,9 +64,13 @@ pub fn build(state: Arc<AppState>) -> Tool {
                 versions.sort_by(|a, b| b.1.cmp(a.1));
 
                 for (version_id, downloads) in versions.iter().take(10) {
+                    let name = version_names
+                        .get(version_id)
+                        .copied()
+                        .unwrap_or("unknown");
                     output.push_str(&format!(
-                        "- Version {}: {}\n",
-                        version_id,
+                        "- v{}: {}\n",
+                        name,
                         format_number(**downloads)
                     ));
                 }
