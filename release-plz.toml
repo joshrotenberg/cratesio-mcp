@@ -13,6 +13,7 @@ pr_draft = false
 publish = true
 
 # Git settings
-git_release_enable = true
-git_release_draft = false
+# cargo-dist creates the GitHub Release (with binaries attached),
+# so release-plz only creates the tag to trigger the cargo-dist workflow.
+git_release_enable = false
 git_tag_enable = true
