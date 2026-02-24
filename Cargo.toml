@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.90"
 description = "MCP server for querying crates.io - the Rust package registry"
 license = "MIT OR Apache-2.0"
+homepage = "https://github.com/joshrotenberg/cratesio-mcp"
 repository = "https://github.com/joshrotenberg/cratesio-mcp"
 keywords = ["mcp", "crates-io", "rust", "tower"]
 categories = ["development-tools", "web-programming"]

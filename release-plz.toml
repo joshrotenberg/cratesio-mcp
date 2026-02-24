@@ -1,0 +1,18 @@
+# release-plz configuration
+# https://release-plz.ieni.dev/docs/config
+
+[workspace]
+# Use git-cliff for changelog generation
+changelog_config = "cliff.toml"
+
+# PR settings
+pr_labels = ["release"]
+pr_draft = false
+
+# Publish to crates.io
+publish = true
+
+# Git settings
+git_release_enable = true
+git_release_draft = false
+git_tag_enable = true
