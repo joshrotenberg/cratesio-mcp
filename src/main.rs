@@ -132,6 +132,7 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
     let audit_tool = tools::audit::build(state.clone());
     let features_tool = tools::features::build(state.clone());
     let user_stats_tool = tools::user_stats::build(state.clone());
+    let compare_tool = tools::compare::build(state.clone());
 
     // Create base router with tools (always registered)
     let instructions = if args.minimal {
@@ -159,7 +160,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - search_docs: Search for items by name within a crate's docs\n\
          - audit_dependencies: Check deps against OSV.dev vulnerability database\n\
          - get_crate_features: Get feature flags for a crate version\n\
-         - get_user_stats: Get download statistics for a crates.io user\n\n\
+         - get_user_stats: Get download statistics for a crates.io user\n\
+         - compare_crates: Compare two or more crates side by side\n\n\
          (Running in minimal mode - resources, prompts, and completions disabled)"
     } else {
         "MCP server for querying crates.io - the Rust package registry.\n\n\
@@ -186,7 +188,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - search_docs: Search for items by name within a crate's docs\n\
          - audit_dependencies: Check deps against OSV.dev vulnerability database\n\
          - get_crate_features: Get feature flags for a crate version\n\
-         - get_user_stats: Get download statistics for a crates.io user\n\n\
+         - get_user_stats: Get download statistics for a crates.io user\n\
+         - compare_crates: Compare two or more crates side by side\n\n\
          Resources:\n\
          - crates://{name}/info: Get crate info as a resource\n\
          - crates://{name}/readme: Get README content for a crate\n\
@@ -221,7 +224,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
         .tool(search_docs_tool)
         .tool(audit_tool)
         .tool(features_tool)
-        .tool(user_stats_tool);
+        .tool(user_stats_tool)
+        .tool(compare_tool);
 
     // Add resources, prompts, and completions unless in minimal mode
     // Minimal mode works around Claude Code MCP tool discovery issues
