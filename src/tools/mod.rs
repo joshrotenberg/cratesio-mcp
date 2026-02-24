@@ -9,6 +9,7 @@ pub mod category;
 pub mod compare;
 pub mod crate_docs;
 pub mod dependencies;
+pub mod dependency_tree;
 pub mod doc_item;
 pub mod downloads;
 pub mod features;
