@@ -53,3 +53,8 @@ tower-resilience = { version = "0.7.1", default-features = false, features = ["b
 
 [dev-dependencies]
 wiremock = "0.6"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
