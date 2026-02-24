@@ -13,6 +13,7 @@ pub mod dependency_tree;
 pub mod doc_item;
 pub mod downloads;
 pub mod features;
+pub mod health_check;
 pub mod info;
 pub mod keyword_detail;
 pub mod keywords;
