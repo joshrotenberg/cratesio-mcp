@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] - 2026-02-24
+
+### Bug Fixes
+
+- Add profile.dist for cargo-dist builds ([#47](https://github.com/joshrotenberg/cratesio-mcp/pull/47))
+
+
+
 ## [0.1.1] - 2026-02-24
 
 ### Bug Fixes
