@@ -134,6 +134,7 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
     let user_stats_tool = tools::user_stats::build(state.clone());
     let compare_tool = tools::compare::build(state.clone());
     let dependency_tree_tool = tools::dependency_tree::build(state.clone());
+    let health_check_tool = tools::health_check::build(state.clone());
 
     // Create base router with tools (always registered)
     let instructions = if args.minimal {
@@ -163,7 +164,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - get_crate_features: Get feature flags for a crate version\n\
          - get_user_stats: Get download statistics for a crates.io user\n\
          - compare_crates: Compare two or more crates side by side\n\
-         - get_dependency_tree: Get full transitive dependency tree for a crate\n\n\
+         - get_dependency_tree: Get full transitive dependency tree for a crate\n\
+         - crate_health_check: Comprehensive health report for a crate\n\n\
          (Running in minimal mode - resources, prompts, and completions disabled)"
     } else {
         "MCP server for querying crates.io - the Rust package registry.\n\n\
@@ -192,7 +194,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - get_crate_features: Get feature flags for a crate version\n\
          - get_user_stats: Get download statistics for a crates.io user\n\
          - compare_crates: Compare two or more crates side by side\n\
-         - get_dependency_tree: Get full transitive dependency tree for a crate\n\n\
+         - get_dependency_tree: Get full transitive dependency tree for a crate\n\
+         - crate_health_check: Comprehensive health report for a crate\n\n\
          Resources:\n\
          - crates://{name}/info: Get crate info as a resource\n\
          - crates://{name}/readme: Get README content for a crate\n\
@@ -229,7 +232,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
         .tool(features_tool)
         .tool(user_stats_tool)
         .tool(compare_tool)
-        .tool(dependency_tree_tool);
+        .tool(dependency_tree_tool)
+        .tool(health_check_tool);
 
     // Add resources, prompts, and completions unless in minimal mode
     // Minimal mode works around Claude Code MCP tool discovery issues

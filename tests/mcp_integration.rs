@@ -42,6 +42,7 @@ fn test_router(state: Arc<AppState>) -> McpRouter {
         .tool(tools::user_stats::build(state.clone()))
         .tool(tools::compare::build(state.clone()))
         .tool(tools::dependency_tree::build(state.clone()))
+        .tool(tools::health_check::build(state.clone()))
         .resource(resources::recent_searches::build(state.clone()))
         .resource_template(resources::crate_info::build(state.clone()))
         .resource_template(resources::readme::build(state.clone()))
@@ -262,7 +263,7 @@ async fn list_tools_returns_all_21() {
 
     let tools = client.list_tools().await;
 
-    assert_eq!(tools.len(), 21);
+    assert_eq!(tools.len(), 22);
     let names: Vec<&str> = tools
         .iter()
         .filter_map(|t| t.get("name").and_then(|n| n.as_str()))
@@ -288,6 +289,7 @@ async fn list_tools_returns_all_21() {
     assert!(names.contains(&"get_user_stats"));
     assert!(names.contains(&"compare_crates"));
     assert!(names.contains(&"get_dependency_tree"));
+    assert!(names.contains(&"crate_health_check"));
 }
 
 #[tokio::test]
@@ -1016,6 +1018,7 @@ fn full_test_router(state: Arc<AppState>) -> McpRouter {
         .tool(tools::doc_item::build(state.clone()))
         .tool(tools::search_docs::build(state.clone()))
         .tool(tools::audit::build(state.clone()))
+        .tool(tools::health_check::build(state.clone()))
 }
 
 async fn full_initialized_client(
@@ -1345,4 +1348,69 @@ async fn tool_get_dependency_tree() {
     assert!(text.contains("Direct dependencies"));
     assert!(text.contains("Total unique crates in tree"));
     assert!(text.contains("API calls made"));
+}
+
+// ── Health check tool test ─────────────────────────────────────────────
+
+#[tokio::test]
+async fn tool_crate_health_check() {
+    let crates_server = MockServer::start().await;
+    let docsrs_server = MockServer::start().await;
+    let osv_server = MockServer::start().await;
+
+    // Mount crate info
+    Mock::given(method("GET"))
+        .and(path("/crates/tower-mcp"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(GET_CRATE_JSON, "application/json"))
+        .mount(&crates_server)
+        .await;
+
+    // Version detail
+    Mock::given(method("GET"))
+        .and(path("/crates/tower-mcp/0.6.0"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(VERSION_JSON, "application/json"))
+        .mount(&crates_server)
+        .await;
+
+    // Dependencies
+    Mock::given(method("GET"))
+        .and(path("/crates/tower-mcp/0.6.0/dependencies"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(DEPENDENCIES_JSON, "application/json"),
+        )
+        .mount(&crates_server)
+        .await;
+
+    // Reverse dependencies
+    Mock::given(method("GET"))
+        .and(path("/crates/tower-mcp/reverse_dependencies"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(REVERSE_DEPS_JSON, "application/json"),
+        )
+        .mount(&crates_server)
+        .await;
+
+    // OSV: no vulnerabilities
+    Mock::given(method("POST"))
+        .and(path("/query"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"vulns": []})))
+        .mount(&osv_server)
+        .await;
+
+    let mut client = full_initialized_client(&crates_server, &docsrs_server, &osv_server).await;
+    let result = client
+        .call_tool("crate_health_check", json!({"name": "tower-mcp"}))
+        .await;
+
+    assert!(!result.is_error);
+    let text = result.all_text();
+    assert!(text.contains("Health Check: tower-mcp v0.6.0"));
+    assert!(text.contains("Maturity"));
+    assert!(text.contains("Adoption"));
+    assert!(text.contains("Maintenance"));
+    assert!(text.contains("Security"));
+    assert!(text.contains("Compatibility"));
+    assert!(text.contains("Dependency Weight"));
+    assert!(text.contains("MIT OR Apache-2.0"));
+    assert!(text.contains("None")); // no vulnerabilities
 }
