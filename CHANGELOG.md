@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] - 2026-02-24
+
+### Bug Fixes
+
+- Disable GitHub release creation in release-plz ([#50](https://github.com/joshrotenberg/cratesio-mcp/pull/50))
+
+### Features
+
+- Add compare_crates tool for side-by-side crate comparison ([#49](https://github.com/joshrotenberg/cratesio-mcp/pull/49))
+- Add get_dependency_tree tool for recursive transitive deps ([#45](https://github.com/joshrotenberg/cratesio-mcp/pull/45)) ([#52](https://github.com/joshrotenberg/cratesio-mcp/pull/52))
+- Add crate_health_check composite tool ([#53](https://github.com/joshrotenberg/cratesio-mcp/pull/53)) ([#56](https://github.com/joshrotenberg/cratesio-mcp/pull/56))
+
+
+
 ## [0.1.2] - 2026-02-24
 
 ### Bug Fixes
