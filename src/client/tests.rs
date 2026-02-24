@@ -280,6 +280,10 @@ const DOWNLOADS_JSON: &str = r#"{
         { "version": 100, "downloads": 50, "date": "2026-02-20" },
         { "version": 100, "downloads": 42, "date": "2026-02-21" },
         { "version": 101, "downloads": 10, "date": "2026-02-21" }
+    ],
+    "versions": [
+        { "id": 100, "num": "0.6.0", "yanked": false, "created_at": "2026-02-11T00:00:00Z", "downloads": 92 },
+        { "id": 101, "num": "0.5.0", "yanked": false, "created_at": "2026-01-15T00:00:00Z", "downloads": 10 }
     ]
 }"#;
 
@@ -305,6 +309,12 @@ async fn crate_downloads_parses_response() {
         Some("2026-02-20")
     );
     assert_eq!(downloads.version_downloads[2].version, 101);
+
+    assert_eq!(downloads.versions.len(), 2);
+    assert_eq!(downloads.versions[0].id, 100);
+    assert_eq!(downloads.versions[0].num, "0.6.0");
+    assert_eq!(downloads.versions[1].id, 101);
+    assert_eq!(downloads.versions[1].num, "0.5.0");
 }
 
 // ── crate_versions ─────────────────────────────────────────────────────────

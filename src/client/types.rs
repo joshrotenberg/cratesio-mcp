@@ -37,6 +37,8 @@ pub struct Crate {
 /// Version metadata from the crates.io API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Version {
+    #[serde(default)]
+    pub id: u64,
     pub num: String,
     #[serde(default)]
     pub yanked: bool,
@@ -155,6 +157,8 @@ pub struct CratesPage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CrateDownloads {
     pub version_downloads: Vec<VersionDownloads>,
+    #[serde(default)]
+    pub versions: Vec<Version>,
 }
 
 /// Reverse dependencies with pagination metadata.
