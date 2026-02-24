@@ -64,15 +64,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
                 versions.sort_by(|a, b| b.1.cmp(a.1));
 
                 for (version_id, downloads) in versions.iter().take(10) {
-                    let name = version_names
-                        .get(version_id)
-                        .copied()
-                        .unwrap_or("unknown");
-                    output.push_str(&format!(
-                        "- v{}: {}\n",
-                        name,
-                        format_number(**downloads)
-                    ));
+                    let name = version_names.get(version_id).copied().unwrap_or("unknown");
+                    output.push_str(&format!("- v{}: {}\n", name, format_number(**downloads)));
                 }
 
                 Ok(CallToolResult::text(output))
