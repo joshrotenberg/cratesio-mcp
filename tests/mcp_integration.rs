@@ -40,6 +40,7 @@ fn test_router(state: Arc<AppState>) -> McpRouter {
         .tool(tools::keyword_detail::build(state.clone()))
         .tool(tools::features::build(state.clone()))
         .tool(tools::user_stats::build(state.clone()))
+        .tool(tools::compare::build(state.clone()))
         .resource(resources::recent_searches::build(state.clone()))
         .resource_template(resources::crate_info::build(state.clone()))
         .resource_template(resources::readme::build(state.clone()))
@@ -254,13 +255,13 @@ async fn mount_get_crate(server: &MockServer) {
 // ── Discovery tests ────────────────────────────────────────────────────────
 
 #[tokio::test]
-async fn list_tools_returns_all_19() {
+async fn list_tools_returns_all_20() {
     let server = MockServer::start().await;
     let mut client = initialized_client(&server).await;
 
     let tools = client.list_tools().await;
 
-    assert_eq!(tools.len(), 19);
+    assert_eq!(tools.len(), 20);
     let names: Vec<&str> = tools
         .iter()
         .filter_map(|t| t.get("name").and_then(|n| n.as_str()))
@@ -284,6 +285,7 @@ async fn list_tools_returns_all_19() {
     assert!(names.contains(&"get_keyword"));
     assert!(names.contains(&"get_crate_features"));
     assert!(names.contains(&"get_user_stats"));
+    assert!(names.contains(&"compare_crates"));
 }
 
 #[tokio::test]
@@ -772,6 +774,147 @@ async fn tool_get_keyword() {
     let text = result.all_text();
     assert!(text.contains("serde"));
     assert!(text.contains("5000"));
+}
+
+// ── Compare tool test ──────────────────────────────────────────────────────
+
+const GET_CRATE_SERDE_JSON: &str = r#"{
+    "crate": {
+        "name": "serde",
+        "updated_at": "2026-01-15T00:00:00.000000Z",
+        "keywords": ["serialization"],
+        "categories": ["encoding"],
+        "created_at": "2015-01-01T00:00:00.000000Z",
+        "downloads": 400000000,
+        "recent_downloads": 20000000,
+        "max_version": "1.0.219",
+        "max_stable_version": "1.0.219",
+        "description": "A serialization framework",
+        "homepage": null,
+        "documentation": "https://docs.rs/serde",
+        "repository": "https://github.com/serde-rs/serde"
+    },
+    "versions": [
+        {
+            "num": "1.0.219",
+            "yanked": false,
+            "created_at": "2026-01-15T00:00:00.000000Z",
+            "downloads": 5000000,
+            "license": "MIT OR Apache-2.0",
+            "rust_version": "1.31"
+        }
+    ]
+}"#;
+
+#[tokio::test]
+async fn tool_compare_crates() {
+    let server = MockServer::start().await;
+
+    // Mount tower-mcp mocks
+    mount_get_crate(&server).await;
+
+    Mock::given(method("GET"))
+        .and(path("/crates/tower-mcp/reverse_dependencies"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(REVERSE_DEPS_JSON, "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/crates/tower-mcp/0.6.0/dependencies"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(DEPENDENCIES_JSON, "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/crates/tower-mcp/0.6.0"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(VERSION_JSON, "application/json"))
+        .mount(&server)
+        .await;
+
+    // Mount serde mocks
+    Mock::given(method("GET"))
+        .and(path("/crates/serde"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(GET_CRATE_SERDE_JSON, "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/crates/serde/reverse_dependencies"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "dependencies": [],
+            "versions": [],
+            "meta": { "total": 50000 }
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/crates/serde/1.0.219/dependencies"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "dependencies": [
+                {
+                    "crate_id": "serde_derive",
+                    "req": "=1.0.219",
+                    "kind": "normal",
+                    "optional": true,
+                    "version_id": 300
+                }
+            ]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/crates/serde/1.0.219"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "version": {
+                "num": "1.0.219",
+                "yanked": false,
+                "created_at": "2026-01-15T00:00:00.000000Z",
+                "downloads": 5000000,
+                "license": "MIT OR Apache-2.0",
+                "rust_version": "1.31"
+            }
+        })))
+        .mount(&server)
+        .await;
+
+    let mut client = initialized_client(&server).await;
+    let result = client
+        .call_tool("compare_crates", json!({"crates": "tower-mcp, serde"}))
+        .await;
+
+    assert!(!result.is_error);
+    let text = result.all_text();
+    assert!(text.contains("tower-mcp"));
+    assert!(text.contains("serde"));
+    assert!(text.contains("Crate Comparison"));
+    assert!(text.contains("Total Downloads"));
+    assert!(text.contains("Latest Version"));
+    assert!(text.contains("0.6.0"));
+    assert!(text.contains("1.0.219"));
+    assert!(text.contains("Reverse Deps"));
+    assert!(text.contains("License"));
+    assert!(text.contains("MSRV"));
+}
+
+#[tokio::test]
+async fn tool_compare_crates_too_few() {
+    let server = MockServer::start().await;
+    let mut client = initialized_client(&server).await;
+    let result = client
+        .call_tool("compare_crates", json!({"crates": "serde"}))
+        .await;
+
+    assert!(!result.is_error);
+    let text = result.all_text();
+    assert!(text.contains("at least 2"));
 }
 
 // ── Features tool test ─────────────────────────────────────────────────────
