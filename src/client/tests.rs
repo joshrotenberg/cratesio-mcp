@@ -641,6 +641,7 @@ async fn user_parses_response() {
         .and(path("/users/joshrotenberg"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "user": {
+                "id": 12345,
                 "login": "joshrotenberg",
                 "name": "Josh Rotenberg",
                 "url": "https://github.com/joshrotenberg",
@@ -655,6 +656,7 @@ async fn user_parses_response() {
     let client = test_client(&server.uri());
     let user = client.user("joshrotenberg").await.unwrap();
 
+    assert_eq!(user.id, 12345);
     assert_eq!(user.login, "joshrotenberg");
     assert_eq!(user.name.as_deref(), Some("Josh Rotenberg"));
     assert_eq!(user.kind.as_deref(), Some("user"));
@@ -995,6 +997,7 @@ async fn auth_header_sent_on_authenticated_request() {
         .and(header("Authorization", "my-secret-token"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "user": {
+                "id": 99999,
                 "login": "testuser",
                 "name": "Test User",
                 "url": "https://github.com/testuser",

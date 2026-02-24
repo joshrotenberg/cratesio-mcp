@@ -39,6 +39,7 @@ fn test_router(state: Arc<AppState>) -> McpRouter {
         .tool(tools::category::build(state.clone()))
         .tool(tools::keyword_detail::build(state.clone()))
         .tool(tools::features::build(state.clone()))
+        .tool(tools::user_stats::build(state.clone()))
         .resource(resources::recent_searches::build(state.clone()))
         .resource_template(resources::crate_info::build(state.clone()))
         .resource_template(resources::readme::build(state.clone()))
@@ -253,13 +254,13 @@ async fn mount_get_crate(server: &MockServer) {
 // ── Discovery tests ────────────────────────────────────────────────────────
 
 #[tokio::test]
-async fn list_tools_returns_all_18() {
+async fn list_tools_returns_all_19() {
     let server = MockServer::start().await;
     let mut client = initialized_client(&server).await;
 
     let tools = client.list_tools().await;
 
-    assert_eq!(tools.len(), 18);
+    assert_eq!(tools.len(), 19);
     let names: Vec<&str> = tools
         .iter()
         .filter_map(|t| t.get("name").and_then(|n| n.as_str()))
@@ -282,6 +283,7 @@ async fn list_tools_returns_all_18() {
     assert!(names.contains(&"get_category"));
     assert!(names.contains(&"get_keyword"));
     assert!(names.contains(&"get_crate_features"));
+    assert!(names.contains(&"get_user_stats"));
 }
 
 #[tokio::test]
@@ -537,6 +539,7 @@ async fn tool_get_user() {
         .and(path("/users/joshrotenberg"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "user": {
+                "id": 12345,
                 "login": "joshrotenberg",
                 "name": "Josh Rotenberg",
                 "url": "https://github.com/joshrotenberg",
@@ -557,6 +560,46 @@ async fn tool_get_user() {
     let text = result.all_text();
     assert!(text.contains("joshrotenberg"));
     assert!(text.contains("Josh Rotenberg"));
+}
+
+#[tokio::test]
+async fn tool_get_user_stats() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/users/joshrotenberg"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "user": {
+                "id": 12345,
+                "login": "joshrotenberg",
+                "name": "Josh Rotenberg",
+                "url": "https://github.com/joshrotenberg",
+                "avatar": "https://avatars.githubusercontent.com/u/3231?v=4",
+                "kind": "user"
+            }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/users/12345/stats"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "total_downloads": 50000
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let mut client = initialized_client(&server).await;
+    let result = client
+        .call_tool("get_user_stats", json!({"username": "joshrotenberg"}))
+        .await;
+
+    assert!(!result.is_error);
+    let text = result.all_text();
+    assert!(text.contains("joshrotenberg"));
+    assert!(text.contains("50.0K"));
 }
 
 #[tokio::test]

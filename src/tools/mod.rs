@@ -21,6 +21,7 @@ pub mod search;
 pub mod search_docs;
 pub mod summary;
 pub mod user;
+pub mod user_stats;
 pub mod version_detail;
 pub mod version_downloads;
 pub mod versions;
