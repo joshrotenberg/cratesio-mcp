@@ -41,6 +41,7 @@ fn test_router(state: Arc<AppState>) -> McpRouter {
         .tool(tools::features::build(state.clone()))
         .tool(tools::user_stats::build(state.clone()))
         .tool(tools::compare::build(state.clone()))
+        .tool(tools::dependency_tree::build(state.clone()))
         .resource(resources::recent_searches::build(state.clone()))
         .resource_template(resources::crate_info::build(state.clone()))
         .resource_template(resources::readme::build(state.clone()))
@@ -255,13 +256,13 @@ async fn mount_get_crate(server: &MockServer) {
 // ── Discovery tests ────────────────────────────────────────────────────────
 
 #[tokio::test]
-async fn list_tools_returns_all_20() {
+async fn list_tools_returns_all_21() {
     let server = MockServer::start().await;
     let mut client = initialized_client(&server).await;
 
     let tools = client.list_tools().await;
 
-    assert_eq!(tools.len(), 20);
+    assert_eq!(tools.len(), 21);
     let names: Vec<&str> = tools
         .iter()
         .filter_map(|t| t.get("name").and_then(|n| n.as_str()))
@@ -286,6 +287,7 @@ async fn list_tools_returns_all_20() {
     assert!(names.contains(&"get_crate_features"));
     assert!(names.contains(&"get_user_stats"));
     assert!(names.contains(&"compare_crates"));
+    assert!(names.contains(&"get_dependency_tree"));
 }
 
 #[tokio::test]
@@ -1287,4 +1289,60 @@ async fn prompt_compare_crates() {
     assert!(text.contains("serde"));
     assert!(text.contains("bincode"));
     assert!(text.contains("binary serialization"));
+}
+
+// ── Dependency tree tool test ──────────────────────────────────────────
+
+#[tokio::test]
+async fn tool_get_dependency_tree() {
+    let server = MockServer::start().await;
+
+    // Root crate: tower-mcp v0.6.0 depends on tokio
+    mount_get_crate(&server).await;
+
+    Mock::given(method("GET"))
+        .and(path("/crates/tower-mcp/0.6.0/dependencies"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(DEPENDENCIES_JSON, "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    // tokio v1.44.0 has no normal deps (simplified)
+    Mock::given(method("GET"))
+        .and(path("/crates/tokio"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "crate": {
+                "name": "tokio",
+                "max_version": "1.44.0",
+                "description": "Async runtime",
+                "downloads": 200000000,
+                "created_at": "2016-01-01T00:00:00.000000Z",
+                "updated_at": "2026-02-01T00:00:00.000000Z"
+            },
+            "versions": [{"num": "1.44.0", "yanked": false, "created_at": "2026-02-01T00:00:00.000000Z", "downloads": 5000000}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/crates/tokio/1.44.0/dependencies"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "dependencies": []
+        })))
+        .mount(&server)
+        .await;
+
+    let mut client = initialized_client(&server).await;
+    let result = client
+        .call_tool("get_dependency_tree", json!({"name": "tower-mcp"}))
+        .await;
+
+    assert!(!result.is_error);
+    let text = result.all_text();
+    assert!(text.contains("Dependency Tree: tower-mcp v0.6.0"));
+    assert!(text.contains("tokio"));
+    assert!(text.contains("Direct dependencies"));
+    assert!(text.contains("Total unique crates in tree"));
+    assert!(text.contains("API calls made"));
 }
