@@ -315,6 +315,9 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
                         CompletionReference::Resource { uri } => {
                             tracing::debug!(%uri, %prefix, "Completing resource URI");
                         }
+                        _ => {
+                            tracing::debug!(%prefix, "Completing unknown reference type");
+                        }
                     }
 
                     Ok(CompleteResult {
@@ -421,9 +424,13 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
                 .layer(bulkhead);
 
             // Conditionally add cache layer
+            // optional_sessions() allows clients that don't carry mcp-session-id
+            // forward (e.g. Codex CLI, Cursor) to still call tools.
+            // See: https://github.com/joshrotenberg/cratesio-mcp/issues/61
             let transport = if args.cache_enabled {
                 HttpTransport::new(router)
                     .disable_origin_validation()
+                    .optional_sessions()
                     .layer(
                         builder
                             .layer(cache)
@@ -433,6 +440,7 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
             } else {
                 HttpTransport::new(router)
                     .disable_origin_validation()
+                    .optional_sessions()
                     .layer(builder.layer(McpTracingLayer::new()).into_inner())
             };
 
