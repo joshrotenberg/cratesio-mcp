@@ -21,6 +21,7 @@ pub struct DownloadsInput {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_downloads")
+        .title("Get Downloads")
         .description(
             "Get download statistics for a crate including total downloads \
              and recent download trends.",

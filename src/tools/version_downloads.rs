@@ -23,6 +23,7 @@ pub struct VersionDownloadsInput {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_version_downloads")
+        .title("Get Version Downloads")
         .description(
             "Get daily download statistics for a specific crate version. \
              Shows the download trend over the last 90 days for that version.",

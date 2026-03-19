@@ -22,6 +22,7 @@ pub struct FeaturesInput {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_crate_features")
+        .title("Get Crate Features")
         .description(
             "Get feature flags for a crate version. Shows all Cargo features \
              and their sub-feature/dependency activations. Useful for understanding \

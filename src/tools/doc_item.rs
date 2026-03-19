@@ -30,6 +30,7 @@ fn default_version() -> String {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_doc_item")
+        .title("Get Doc Item")
         .description(
             "Get full documentation for a specific item (function, struct, trait, etc.) \
              from docs.rs. Includes the item's signature, doc comments, and for structs, \

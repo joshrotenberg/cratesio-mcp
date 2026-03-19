@@ -20,6 +20,7 @@ pub struct OwnersInput {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_owners")
+        .title("Get Owners")
         .description(
             "Get the owners/maintainers of a crate. Shows GitHub usernames \
              and team memberships.",

@@ -32,6 +32,7 @@ fn default_per_page() -> u64 {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_categories")
+        .title("Get Categories")
         .description(
             "List crates.io categories with the number of crates in each. \
              Useful for discovering crates by domain (e.g., web-programming, \

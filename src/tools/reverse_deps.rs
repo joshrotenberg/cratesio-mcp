@@ -21,6 +21,7 @@ pub struct ReverseDepsInput {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_reverse_dependencies")
+        .title("Get Reverse Dependencies")
         .description(
             "Get crates that depend on the specified crate (reverse dependencies). \
              Useful for understanding a crate's ecosystem impact.",

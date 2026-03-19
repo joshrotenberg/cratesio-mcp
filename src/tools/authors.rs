@@ -23,6 +23,7 @@ pub struct AuthorsInput {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_crate_authors")
+        .title("Get Crate Authors")
         .description(
             "Get the authors of a specific crate version. Authors are the people \
              listed in the Cargo.toml [package].authors field.",

@@ -23,6 +23,7 @@ pub struct ReadmeInput {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_crate_readme")
+        .title("Get Crate Readme")
         .description(
             "Get the README content for a crate version. Returns the rendered README \
              from the crate's published package. Defaults to the latest version.",

@@ -100,6 +100,7 @@ fn format_tree(
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_dependency_tree")
+        .title("Get Dependency Tree")
         .description(
             "Get the full transitive dependency tree for a crate, recursively resolving \
              dependencies to a configurable depth. Shows the complete dependency footprint \
