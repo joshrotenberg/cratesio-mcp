@@ -8,9 +8,19 @@ use super::types::{
     CrateSettings, NewGitHubConfig, NewGitLabConfig, PublishMetadata, VersionSettings,
 };
 
-/// Create a client pointed at the mock server with no rate limiting.
+/// Create a client pointed at the mock server with no rate limiting and retries disabled.
 fn test_client(base_url: &str) -> CratesIoClient {
-    CratesIoClient::with_base_url("test-agent", Duration::from_millis(0), base_url).unwrap()
+    CratesIoClient::with_base_url("test-agent", Duration::from_millis(0), base_url)
+        .unwrap()
+        .with_max_retries(0)
+}
+
+/// Create a client with retries enabled and zero backoff (for fast tests).
+fn test_retry_client(base_url: &str) -> CratesIoClient {
+    CratesIoClient::with_base_url("test-agent", Duration::from_millis(0), base_url)
+        .unwrap()
+        .with_max_retries(3)
+        .with_initial_backoff(Duration::from_millis(0))
 }
 
 // ── get_crate ───────────────────────────────────────────────────────────────
@@ -1707,6 +1717,97 @@ async fn exchange_oidc_token_sends_post() {
     let token = client.exchange_oidc_token("my-jwt").await.unwrap();
 
     assert_eq!(token, "cio-publish-token-abc");
+}
+
+// ── retry ────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn retry_succeeds_after_transient_500() {
+    let server = MockServer::start().await;
+
+    // Success response (lowest priority — matched after the 500 is consumed).
+    Mock::given(method("GET"))
+        .and(path("/summary"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(SUMMARY_JSON, "application/json"))
+        .mount(&server)
+        .await;
+
+    // 500 on first attempt only (highest priority — matched first).
+    Mock::given(method("GET"))
+        .and(path("/summary"))
+        .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+
+    let client = test_retry_client(&server.uri());
+    let summary = client.summary().await.unwrap();
+
+    assert_eq!(summary.num_crates, 180000);
+}
+
+#[tokio::test]
+async fn retry_succeeds_after_429() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/summary"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(SUMMARY_JSON, "application/json"))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/summary"))
+        .respond_with(ResponseTemplate::new(429))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+
+    let client = test_retry_client(&server.uri());
+    let summary = client.summary().await.unwrap();
+
+    assert_eq!(summary.num_crates, 180000);
+}
+
+#[tokio::test]
+async fn gives_up_after_max_retries() {
+    let server = MockServer::start().await;
+
+    // Always returns 500 — client should exhaust retries and surface the error.
+    Mock::given(method("GET"))
+        .and(path("/summary"))
+        .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+        .mount(&server)
+        .await;
+
+    let client = test_retry_client(&server.uri());
+    let err = client.summary().await.unwrap_err();
+
+    assert!(
+        matches!(err, super::Error::Api { status: 500, .. }),
+        "expected Api {{ status: 500 }}, got: {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn no_retry_on_404() {
+    let server = MockServer::start().await;
+
+    // 404 should not be retried — mock expects exactly one call.
+    Mock::given(method("GET"))
+        .and(path("/crates/nonexistent"))
+        .respond_with(ResponseTemplate::new(404))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_retry_client(&server.uri());
+    let err = client.get_crate("nonexistent").await.unwrap_err();
+
+    assert!(
+        matches!(err, super::Error::NotFound(_)),
+        "expected NotFound, got: {err:?}"
+    );
 }
 
 // ── publish ─────────────────────────────────────────────────────────────────
