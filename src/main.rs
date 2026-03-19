@@ -204,7 +204,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - analyze_crate: Comprehensive crate analysis\n\
          - compare_crates: Compare multiple crates\n\
          - stack_review: Evaluate a set of crates as a cohesive stack\n\
-         - evaluate_dependencies: Evaluate project dependencies for health and security"
+         - evaluate_dependencies: Evaluate project dependencies for health and security\n\
+         - recommend_crates: Find and evaluate crates for a use case"
     };
 
     let mut router = McpRouter::new()
@@ -252,6 +253,7 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
         let compare_prompt = prompts::compare::build();
         let stack_review_prompt = prompts::stack_review::build();
         let evaluate_dependencies_prompt = prompts::evaluate_dependencies::build();
+        let recommend_prompt = prompts::recommend::build();
 
         // Popular crates for completion suggestions
         let popular_crates = vec![
@@ -299,6 +301,7 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
             .prompt(compare_prompt)
             .prompt(stack_review_prompt)
             .prompt(evaluate_dependencies_prompt)
+            .prompt(recommend_prompt)
             // Completion handler for crate name suggestions
             .completion_handler(move |params: CompleteParams| {
                 let popular = popular_crates.clone();
