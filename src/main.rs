@@ -136,6 +136,7 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
     let dependency_tree_tool = tools::dependency_tree::build(state.clone());
     let health_check_tool = tools::health_check::build(state.clone());
     let find_alternatives_tool = tools::alternatives::build(state.clone());
+    let changelog_tool = tools::changelog::build(state.clone());
 
     // Create base router with tools (always registered)
     let instructions = if args.minimal {
@@ -167,7 +168,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - compare_crates: Compare two or more crates side by side\n\
          - get_dependency_tree: Get full transitive dependency tree for a crate\n\
          - crate_health_check: Comprehensive health report for a crate\n\
-         - find_alternatives: Find and compare alternative crates for a given crate\n\n\
+         - find_alternatives: Find and compare alternative crates for a given crate\n\
+         - get_crate_changelog: Fetch changelog from a crate's GitHub repository\n\n\
          (Running in minimal mode - resources, prompts, and completions disabled)"
     } else {
         "MCP server for querying crates.io - the Rust package registry.\n\n\
@@ -198,7 +200,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - compare_crates: Compare two or more crates side by side\n\
          - get_dependency_tree: Get full transitive dependency tree for a crate\n\
          - crate_health_check: Comprehensive health report for a crate\n\
-         - find_alternatives: Find and compare alternative crates for a given crate\n\n\
+         - find_alternatives: Find and compare alternative crates for a given crate\n\
+         - get_crate_changelog: Fetch changelog from a crate's GitHub repository\n\n\
          Resources:\n\
          - crates://{name}/info: Get crate info as a resource\n\
          - crates://{name}/readme: Get README content for a crate\n\
@@ -241,7 +244,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
         .tool(compare_tool)
         .tool(dependency_tree_tool)
         .tool(health_check_tool)
-        .tool(find_alternatives_tool);
+        .tool(find_alternatives_tool)
+        .tool(changelog_tool);
 
     // Add resources, prompts, and completions unless in minimal mode
     // Minimal mode works around Claude Code MCP tool discovery issues
