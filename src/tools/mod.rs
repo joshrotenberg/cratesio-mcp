@@ -6,6 +6,7 @@ pub mod audit;
 pub mod authors;
 pub mod categories;
 pub mod category;
+pub mod changelog;
 pub mod compare;
 pub mod crate_docs;
 pub mod dependencies;

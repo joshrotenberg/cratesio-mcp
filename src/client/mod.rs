@@ -11,6 +11,7 @@ pub mod types;
 pub(crate) mod wire;
 
 mod categories;
+pub mod changelog;
 mod crates;
 mod keywords;
 mod metadata;
@@ -61,6 +62,8 @@ impl std::fmt::Debug for Auth {
 pub struct CratesIoClient {
     http: reqwest::Client,
     base_url: String,
+    /// Base URL for fetching raw GitHub content (default: https://raw.githubusercontent.com).
+    pub(crate) github_raw_base_url: String,
     rate_limit: Duration,
     last_request: Arc<Mutex<Option<Instant>>>,
     auth: Option<Auth>,
@@ -82,10 +85,17 @@ impl CratesIoClient {
         Ok(Self {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
+            github_raw_base_url: "https://raw.githubusercontent.com".to_string(),
             rate_limit,
             last_request: Arc::new(Mutex::new(None)),
             auth: None,
         })
+    }
+
+    /// Override the base URL used for raw GitHub content (for testing).
+    pub fn with_github_raw_url(mut self, url: &str) -> Self {
+        self.github_raw_base_url = url.trim_end_matches('/').to_string();
+        self
     }
 
     /// Enable authentication with an API token.

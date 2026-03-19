@@ -68,9 +68,19 @@ impl AppState {
     /// with zero rate limiting for fast test execution. DocsRs/OSV clients use
     /// default constructors.
     pub fn with_base_url(base_url: &str) -> Result<Self, tower_mcp::BoxError> {
+        Self::with_changelog_urls(base_url, "https://raw.githubusercontent.com")
+    }
+
+    /// Create application state with custom crates.io and GitHub raw content
+    /// base URLs (for testing changelog fetching).
+    pub fn with_changelog_urls(
+        base_url: &str,
+        github_raw_url: &str,
+    ) -> Result<Self, tower_mcp::BoxError> {
         let user_agent = "cratesio-mcp-test";
         let client = CratesIoClient::with_base_url(user_agent, Duration::from_millis(0), base_url)
-            .map_err(|e| format!("Failed to create crates.io client: {e}"))?;
+            .map_err(|e| format!("Failed to create crates.io client: {e}"))?
+            .with_github_raw_url(github_raw_url);
         let docsrs_client = DocsRsClient::new(user_agent)
             .map_err(|e| format!("Failed to create docs.rs client: {e}"))?;
         let osv_client =
