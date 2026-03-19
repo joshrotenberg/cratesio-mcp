@@ -58,12 +58,15 @@ impl std::fmt::Debug for Auth {
 ///
 /// Includes built-in rate limiting to respect the crates.io crawling policy.
 /// Supports optional authentication via API token for write operations.
+/// Retries transient failures (429, 5xx) with exponential backoff.
 pub struct CratesIoClient {
     http: reqwest::Client,
     base_url: String,
     rate_limit: Duration,
     last_request: Arc<Mutex<Option<Instant>>>,
     auth: Option<Auth>,
+    max_retries: u32,
+    initial_backoff: Duration,
 }
 
 impl CratesIoClient {
@@ -85,7 +88,25 @@ impl CratesIoClient {
             rate_limit,
             last_request: Arc::new(Mutex::new(None)),
             auth: None,
+            max_retries: 3,
+            initial_backoff: Duration::from_millis(500),
         })
+    }
+
+    /// Set the maximum number of retries for transient failures.
+    ///
+    /// Returns `self` for builder-style chaining.
+    pub fn with_max_retries(mut self, max_retries: u32) -> Self {
+        self.max_retries = max_retries;
+        self
+    }
+
+    /// Set the initial backoff duration for exponential retry backoff.
+    ///
+    /// Returns `self` for builder-style chaining.
+    pub fn with_initial_backoff(mut self, backoff: Duration) -> Self {
+        self.initial_backoff = backoff;
+        self
     }
 
     /// Enable authentication with an API token.
@@ -120,12 +141,53 @@ impl CratesIoClient {
         *last = Some(Instant::now());
     }
 
+    /// Execute an HTTP request with exponential backoff retry on 429 and 5xx responses.
+    ///
+    /// `make_request` is called once per attempt. Retries are only performed for
+    /// transient failures (429 Too Many Requests, 5xx Server Error). Client errors
+    /// (4xx other than 429) are returned immediately without retrying.
+    async fn send_with_retry<F, Fut>(
+        &self,
+        path: &str,
+        make_request: F,
+    ) -> Result<reqwest::Response, Error>
+    where
+        F: Fn() -> Fut,
+        Fut: std::future::Future<Output = Result<reqwest::Response, reqwest::Error>>,
+    {
+        let mut attempt = 0u32;
+        loop {
+            self.throttle().await;
+            let resp = make_request().await?;
+            let status = resp.status();
+
+            let retryable =
+                status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error();
+
+            if retryable && attempt < self.max_retries {
+                let backoff = self.initial_backoff * 2u32.pow(attempt);
+                tracing::warn!(
+                    attempt = attempt + 1,
+                    max_retries = self.max_retries,
+                    status = status.as_u16(),
+                    path,
+                    backoff_ms = backoff.as_millis(),
+                    "retrying crates.io request"
+                );
+                tokio::time::sleep(backoff).await;
+                attempt += 1;
+                continue;
+            }
+
+            return Self::check_status(resp, path).await;
+        }
+    }
+
     /// Send a GET request and check the response status.
     pub(crate) async fn send(&self, path: &str) -> Result<reqwest::Response, Error> {
-        self.throttle().await;
         let url = format!("{}{}", self.base_url, path);
-        let resp = self.http.get(&url).send().await?;
-        Self::check_status(resp, path).await
+        self.send_with_retry(path, || self.http.get(&url).send())
+            .await
     }
 
     /// Send a GET request with query parameters and check the response status.
@@ -134,10 +196,9 @@ impl CratesIoClient {
         path: &str,
         query: &[(String, String)],
     ) -> Result<reqwest::Response, Error> {
-        self.throttle().await;
         let url = format!("{}{}", self.base_url, path);
-        let resp = self.http.get(&url).query(query).send().await?;
-        Self::check_status(resp, path).await
+        self.send_with_retry(path, || self.http.get(&url).query(query).send())
+            .await
     }
 
     /// Map non-success HTTP status codes to typed errors.
@@ -191,16 +252,12 @@ impl CratesIoClient {
 
     /// Send an authenticated GET request.
     pub(crate) async fn send_auth(&self, path: &str) -> Result<reqwest::Response, Error> {
-        let token = self.require_auth()?;
-        self.throttle().await;
+        let token = self.require_auth()?.to_string();
         let url = format!("{}{}", self.base_url, path);
-        let resp = self
-            .http
-            .get(&url)
-            .header("Authorization", token)
-            .send()
-            .await?;
-        Self::check_status(resp, path).await
+        self.send_with_retry(path, || {
+            self.http.get(&url).header("Authorization", &token).send()
+        })
+        .await
     }
 
     /// Send an authenticated GET request with query parameters.
