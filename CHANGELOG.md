@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.4] - 2026-03-19
+
+### Features
+
+- Upgrade tower-mcp to 0.9.1 and enable optional_sessions for HTTP transport ([#63](https://github.com/joshrotenberg/cratesio-mcp/pull/63))
+- Add evaluate_dependencies prompt (closes #57) ([#66](https://github.com/joshrotenberg/cratesio-mcp/pull/66))
+- Add recommend_crates prompt (closes #58) ([#67](https://github.com/joshrotenberg/cratesio-mcp/pull/67))
+- Add migration_guide prompt (closes #59) ([#68](https://github.com/joshrotenberg/cratesio-mcp/pull/68))
+- Add retry with exponential backoff for outbound API calls (closes #42) ([#70](https://github.com/joshrotenberg/cratesio-mcp/pull/70))
+- Add find_alternatives tool (closes #54) ([#71](https://github.com/joshrotenberg/cratesio-mcp/pull/71))
+
+
+
 ## [0.1.3] - 2026-02-24
 
 ### Bug Fixes
