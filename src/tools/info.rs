@@ -20,6 +20,7 @@ pub struct InfoInput {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_crate_info")
+        .title("Get Crate Info")
         .description(
             "Get detailed information about a specific crate including description, \
              links, download stats, keywords, and categories.",

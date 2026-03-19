@@ -111,6 +111,7 @@ fn format_findings(
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("audit_dependencies")
+        .title("Audit Dependencies")
         .description(
             "Check a crate's dependencies against the OSV.dev vulnerability database \
              (RustSec + GHSA + NVD). Returns known vulnerabilities for each dependency.",

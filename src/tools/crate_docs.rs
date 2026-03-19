@@ -30,6 +30,7 @@ fn default_version() -> String {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_crate_docs")
+        .title("Get Crate Docs")
         .description(
             "Browse a crate's documentation structure from docs.rs. \
              Lists modules, structs, traits, functions, and other items \

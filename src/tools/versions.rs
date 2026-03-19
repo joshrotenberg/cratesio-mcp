@@ -30,6 +30,7 @@ fn default_limit() -> usize {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_crate_versions")
+        .title("Get Crate Versions")
         .description(
             "Get version history for a crate including version numbers, release dates, \
              download counts, and yanked status.",

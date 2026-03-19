@@ -20,6 +20,7 @@ pub struct UserStatsInput {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_user_stats")
+        .title("Get User Stats")
         .description(
             "Get download statistics for a crates.io user. \
              Shows total downloads across all of the user's crates.",

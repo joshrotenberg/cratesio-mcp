@@ -22,6 +22,7 @@ pub struct VersionDetailInput {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_crate_version")
+        .title("Get Crate Version")
         .description(
             "Get detailed metadata for a specific crate version including \
              license, MSRV, download count, and yanked status.",

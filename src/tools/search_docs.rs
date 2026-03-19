@@ -37,6 +37,7 @@ fn default_limit() -> usize {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("search_docs")
+        .title("Search Docs")
         .description(
             "Search for items by name within a crate's documentation on docs.rs. \
              Returns matching functions, structs, traits, etc. with their paths \

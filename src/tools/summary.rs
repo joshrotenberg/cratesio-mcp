@@ -11,6 +11,7 @@ use crate::state::{AppState, format_number};
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_summary")
+        .title("Get Summary")
         .description(
             "Get crates.io summary statistics including total crates, downloads, \
              new crates, most downloaded, and recently updated crates.",

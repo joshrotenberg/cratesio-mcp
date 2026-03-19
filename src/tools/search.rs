@@ -38,6 +38,7 @@ fn parse_sort(s: &str) -> Sort {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("search_crates")
+        .title("Search Crates")
         .description(
             "Search for Rust crates on crates.io. Returns crate names, descriptions, \
              download counts, and repository links.",

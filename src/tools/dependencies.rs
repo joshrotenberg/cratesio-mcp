@@ -25,6 +25,7 @@ pub struct DependenciesInput {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_dependencies")
+        .title("Get Dependencies")
         .description(
             "Get dependencies for a crate version. Shows required and optional deps, \
              version requirements, and whether they're build or dev dependencies.",

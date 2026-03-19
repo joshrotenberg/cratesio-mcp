@@ -32,6 +32,7 @@ fn default_per_page() -> u64 {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_keywords")
+        .title("Get Keywords")
         .description(
             "List crates.io keywords with the number of crates using each. \
              Useful for discovering crates by tag (e.g., async, cli, parser, serialization).",

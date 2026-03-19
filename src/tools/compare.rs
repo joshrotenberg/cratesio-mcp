@@ -20,6 +20,7 @@ pub struct CompareInput {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("compare_crates")
+        .title("Compare Crates")
         .description(
             "Compare two or more crates side by side. Returns a structured comparison of \
              downloads, versions, dependencies, reverse dependencies, and freshness.",

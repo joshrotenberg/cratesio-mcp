@@ -20,6 +20,7 @@ pub struct KeywordDetailInput {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_keyword")
+        .title("Get Keyword")
         .description(
             "Get details about a specific crates.io keyword, \
              including the number of crates using it.",

@@ -20,6 +20,7 @@ pub struct CategoryInput {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_category")
+        .title("Get Category")
         .description(
             "Get details about a specific crates.io category by slug, \
              including its description and crate count.",

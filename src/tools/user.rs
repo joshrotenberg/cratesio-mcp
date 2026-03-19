@@ -20,6 +20,7 @@ pub struct UserInput {
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_user")
+        .title("Get User")
         .description("Get a crates.io user's profile information by their GitHub username.")
         .read_only()
         .idempotent()
