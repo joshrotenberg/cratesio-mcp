@@ -17,6 +17,7 @@ pub struct FeaturesInput {
     /// Crate name (e.g. "serde", "tokio")
     name: String,
     /// Version string (e.g. "1.0.0"). Defaults to latest version.
+    #[serde(default)]
     version: Option<String>,
 }
 
@@ -102,4 +103,14 @@ pub fn build(state: Arc<AppState>) -> Tool {
             },
         )
         .build()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn input_deserializes_without_version_key() {
+        let input: super::FeaturesInput =
+            serde_json::from_value(serde_json::json!({"name": "serde"})).unwrap();
+        assert!(input.version.is_none());
+    }
 }

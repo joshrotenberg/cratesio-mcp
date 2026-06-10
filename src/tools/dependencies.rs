@@ -17,6 +17,7 @@ pub struct DependenciesInput {
     /// Crate name
     name: String,
     /// Version (default: latest)
+    #[serde(default)]
     version: Option<String>,
     /// Include dev dependencies
     #[serde(default)]
@@ -101,4 +102,14 @@ pub fn build(state: Arc<AppState>) -> Tool {
             },
         )
         .build()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn input_deserializes_without_version_key() {
+        let input: super::DependenciesInput =
+            serde_json::from_value(serde_json::json!({"name": "serde"})).unwrap();
+        assert!(input.version.is_none());
+    }
 }

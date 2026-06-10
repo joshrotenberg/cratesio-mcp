@@ -18,6 +18,7 @@ pub struct HealthCheckInput {
     /// Crate name to evaluate
     name: String,
     /// Version to check (default: latest)
+    #[serde(default)]
     version: Option<String>,
 }
 
@@ -439,5 +440,12 @@ mod tests {
         assert!(text.contains("audit_dependencies"));
         // Stale crate
         assert!(text.contains("Stale") || text.contains("Aging"));
+    }
+
+    #[test]
+    fn input_deserializes_without_version_key() {
+        let input: super::HealthCheckInput =
+            serde_json::from_value(serde_json::json!({"name": "serde"})).unwrap();
+        assert!(input.version.is_none());
     }
 }

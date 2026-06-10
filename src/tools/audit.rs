@@ -18,6 +18,7 @@ pub struct AuditInput {
     /// Crate name to audit
     name: String,
     /// Version to audit (default: latest)
+    #[serde(default)]
     version: Option<String>,
     /// Include dev dependencies in audit
     #[serde(default)]
@@ -189,4 +190,14 @@ pub fn build(state: Arc<AppState>) -> Tool {
             },
         )
         .build()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn input_deserializes_without_version_key() {
+        let input: super::AuditInput =
+            serde_json::from_value(serde_json::json!({"name": "serde"})).unwrap();
+        assert!(input.version.is_none());
+    }
 }

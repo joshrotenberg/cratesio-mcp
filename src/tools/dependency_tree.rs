@@ -19,6 +19,7 @@ pub struct DependencyTreeInput {
     /// Crate name
     name: String,
     /// Version (default: latest)
+    #[serde(default)]
     version: Option<String>,
     /// Maximum depth to recurse (default: 3, max: 5)
     max_depth: Option<u32>,
@@ -665,5 +666,12 @@ mod tests {
         // Should show root and direct deps but not recurse further
         assert!(text.contains("Dependency Tree: my-crate v1.0.0"));
         assert!(text.contains("dep-a"));
+    }
+
+    #[test]
+    fn input_deserializes_without_version_key() {
+        let input: super::DependencyTreeInput =
+            serde_json::from_value(serde_json::json!({"name": "serde"})).unwrap();
+        assert!(input.version.is_none());
     }
 }
