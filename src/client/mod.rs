@@ -63,7 +63,7 @@ impl std::fmt::Debug for Auth {
 pub struct CratesIoClient {
     http: reqwest::Client,
     base_url: String,
-    /// Base URL for fetching raw GitHub content (default: https://raw.githubusercontent.com).
+    /// Base URL for fetching raw GitHub content (default: `https://raw.githubusercontent.com`).
     pub(crate) github_raw_base_url: String,
     rate_limit: Duration,
     last_request: Arc<Mutex<Option<Instant>>>,
