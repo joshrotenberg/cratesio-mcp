@@ -24,6 +24,7 @@ pub fn build(state: Arc<AppState>) -> Tool {
         .description("Get a crates.io user's profile information by their GitHub username.")
         .read_only()
         .idempotent()
+        .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
             |State(state): State<Arc<AppState>>, Json(input): Json<UserInput>| async move {

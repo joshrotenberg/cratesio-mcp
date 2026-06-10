@@ -27,6 +27,7 @@ pub fn build(state: Arc<AppState>) -> Tool {
         )
         .read_only()
         .idempotent()
+        .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
             |State(state): State<Arc<AppState>>, Json(input): Json<UserStatsInput>| async move {
