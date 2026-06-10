@@ -353,6 +353,7 @@ dependencies = [
 name = "cratesio-mcp"
 version = "0.1.4"
 dependencies = [
+ "axum",
  "chrono",
  "clap",
  "flate2",

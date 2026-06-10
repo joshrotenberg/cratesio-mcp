@@ -460,9 +460,66 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
                     .layer(builder.layer(McpTracingLayer::new()).into_inner())
             };
 
-            transport.serve(&addr).await?;
+            // Take over routing (instead of `transport.serve`) so we can add an
+            // HTTP-level middleware that logs the real client IP. The MCP-level
+            // `.layer()` stack above operates on parsed MCP requests and never
+            // sees `/health` or raw HTTP headers, so request-origin logging has
+            // to live out here, outside the MCP service.
+            let app = transport
+                .into_router()
+                .layer(axum::middleware::from_fn(log_http_request));
+
+            let listener = tokio::net::TcpListener::bind(&addr).await?;
+            tracing::info!("MCP HTTP transport listening on {}", addr);
+            axum::serve(listener, app).await?;
         }
     }
 
     Ok(())
+}
+
+/// Sample rate for HTTP request-origin logging: 1 of every N requests is logged
+/// at INFO. The `/health` endpoint is polled continuously by the platform and
+/// any uptime monitors, so logging every request would flood the logs; sampling
+/// keeps the volume bounded while still surfacing the source IP and User-Agent
+/// of any high-frequency caller.
+const HTTP_LOG_SAMPLE_RATE: u64 = 50;
+
+/// Axum middleware that logs the originating client of a sampled subset of HTTP
+/// requests. Behind Fly.io the TCP peer is the Fly proxy, so the real client
+/// address arrives in the `Fly-Client-IP` header (falling back to
+/// `X-Forwarded-For`). Used to identify high-volume callers (e.g. health-check
+/// pollers) that never reach the MCP-level tracing layer.
+async fn log_http_request(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    if COUNTER
+        .fetch_add(1, Ordering::Relaxed)
+        .is_multiple_of(HTTP_LOG_SAMPLE_RATE)
+    {
+        let headers = req.headers();
+        let client_ip = headers
+            .get("fly-client-ip")
+            .or_else(|| headers.get("x-forwarded-for"))
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("unknown");
+        let user_agent = headers
+            .get(axum::http::header::USER_AGENT)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("unknown");
+        tracing::info!(
+            client_ip,
+            user_agent,
+            method = %req.method(),
+            path = req.uri().path(),
+            sampled_1_in = HTTP_LOG_SAMPLE_RATE,
+            "HTTP request (sampled)"
+        );
+    }
+
+    next.run(req).await
 }
