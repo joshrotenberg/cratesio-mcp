@@ -34,4 +34,8 @@ pub enum Error {
     /// JSON serialization error.
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
+
+    /// Response body exceeded the maximum allowed size.
+    #[error("response too large for {path}: {size} bytes exceeds limit of {limit}")]
+    ResponseTooLarge { path: String, size: u64, limit: u64 },
 }

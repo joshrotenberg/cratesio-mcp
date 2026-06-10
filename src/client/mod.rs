@@ -38,6 +38,10 @@ pub use error::Error;
 pub use query::{CratesQuery, CratesQueryBuilder, Sort};
 pub use types::*;
 
+/// Maximum size in bytes for a text resource read (e.g. README), to bound
+/// memory use from an oversized or malicious response.
+const MAX_TEXT_RESPONSE_BYTES: u64 = 5 * 1024 * 1024;
+
 // ── Auth ────────────────────────────────────────────────────────────────────
 
 /// Authentication credentials for the crates.io API.
@@ -252,10 +256,37 @@ impl CratesIoClient {
         Ok(resp.json().await?)
     }
 
-    /// GET a text resource (e.g. readme).
+    /// GET a text resource (e.g. readme), bounded to [`MAX_TEXT_RESPONSE_BYTES`]
+    /// so an oversized or malicious response cannot exhaust memory.
     pub(crate) async fn get_text(&self, path: &str) -> Result<String, Error> {
-        let resp = self.send(path).await?;
-        Ok(resp.text().await?)
+        let mut resp = self.send(path).await?;
+
+        // Reject early if the server declares an oversized body.
+        if let Some(len) = resp.content_length()
+            && len > MAX_TEXT_RESPONSE_BYTES
+        {
+            return Err(Error::ResponseTooLarge {
+                path: path.to_string(),
+                size: len,
+                limit: MAX_TEXT_RESPONSE_BYTES,
+            });
+        }
+
+        // Content-Length may be absent or understated, so cap the actual read.
+        let mut buf: Vec<u8> = Vec::new();
+        while let Some(chunk) = resp.chunk().await? {
+            let total = buf.len() as u64 + chunk.len() as u64;
+            if total > MAX_TEXT_RESPONSE_BYTES {
+                return Err(Error::ResponseTooLarge {
+                    path: path.to_string(),
+                    size: total,
+                    limit: MAX_TEXT_RESPONSE_BYTES,
+                });
+            }
+            buf.extend_from_slice(&chunk);
+        }
+
+        Ok(String::from_utf8_lossy(&buf).into_owned())
     }
 
     // ── Authenticated HTTP helpers ──────────────────────────────────────

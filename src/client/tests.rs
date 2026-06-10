@@ -564,6 +564,24 @@ async fn crate_readme_returns_text() {
     assert_eq!(readme, readme_text);
 }
 
+#[tokio::test]
+async fn crate_readme_rejects_oversized_response() {
+    let server = MockServer::start().await;
+    // Body larger than the 5 MiB get_text cap.
+    let big = "a".repeat(6 * 1024 * 1024);
+
+    Mock::given(method("GET"))
+        .and(path("/crates/huge/1.0.0/readme"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(big))
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri());
+    let err = client.crate_readme("huge", "1.0.0").await.unwrap_err();
+
+    assert!(matches!(err, super::Error::ResponseTooLarge { .. }));
+}
+
 // ── crate_reverse_dependencies ─────────────────────────────────────────────
 
 const REVERSE_DEPS_JSON: &str = r#"{
