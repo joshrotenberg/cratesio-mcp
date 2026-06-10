@@ -21,6 +21,10 @@ pub enum DocsRsError {
     )]
     DocsNotAvailable { name: String, version: String },
 
+    /// The docs.rs response exceeded the maximum allowed size.
+    #[error("rustdoc JSON for {name} is too large ({size} bytes), exceeds the {limit} byte limit")]
+    ResponseTooLarge { name: String, size: u64, limit: u64 },
+
     /// Failed to decompress gzip response from docs.rs.
     #[error("failed to decompress rustdoc JSON for {name}: {source}")]
     Decompress {
@@ -48,11 +52,55 @@ pub enum DocsRsError {
     },
 }
 
+/// Maximum number of bytes read or decompressed from a docs.rs response.
+///
+/// Caps both the compressed response body and the decompressed rustdoc JSON so
+/// a malicious or pathologically large payload cannot exhaust memory.
+const MAX_RESPONSE_BYTES: u64 = 100 * 1024 * 1024; // 100 MB
+
 /// Minimal struct to extract just the format version from rustdoc JSON.
 #[derive(serde::Deserialize)]
 #[allow(dead_code)]
 struct FormatVersionCheck {
     format_version: u32,
+}
+
+/// Decode a docs.rs response body, enforcing `limit` on both the compressed
+/// input and the decompressed output so a huge or malicious (gzip-bomb)
+/// payload cannot exhaust memory.
+fn decode_body(name: &str, bytes: &[u8], limit: u64) -> Result<Vec<u8>, DocsRsError> {
+    // Servers may omit or understate Content-Length, so also enforce the
+    // limit on the buffered compressed body.
+    if bytes.len() as u64 > limit {
+        return Err(DocsRsError::ResponseTooLarge {
+            name: name.to_string(),
+            size: bytes.len() as u64,
+            limit,
+        });
+    }
+
+    if bytes.starts_with(&[0x1f, 0x8b]) {
+        let decoder = GzDecoder::new(bytes);
+        // Read one byte past the limit so an over-limit payload is detected.
+        let mut limited = decoder.take(limit + 1);
+        let mut decompressed = Vec::new();
+        limited
+            .read_to_end(&mut decompressed)
+            .map_err(|source| DocsRsError::Decompress {
+                name: name.to_string(),
+                source,
+            })?;
+        if decompressed.len() as u64 > limit {
+            return Err(DocsRsError::ResponseTooLarge {
+                name: name.to_string(),
+                size: decompressed.len() as u64,
+                limit,
+            });
+        }
+        Ok(decompressed)
+    } else {
+        Ok(bytes.to_vec())
+    }
 }
 
 /// HTTP client for the docs.rs rustdoc JSON API.
@@ -104,24 +152,25 @@ impl DocsRsClient {
             return Ok(resp.json().await?);
         }
 
+        // Reject responses that advertise a size above the limit before
+        // buffering the body, so a huge payload cannot exhaust memory.
+        if let Some(len) = resp.content_length()
+            && len > MAX_RESPONSE_BYTES
+        {
+            return Err(DocsRsError::ResponseTooLarge {
+                name: name.to_string(),
+                size: len,
+                limit: MAX_RESPONSE_BYTES,
+            });
+        }
+
         let bytes = resp.bytes().await?;
 
         // docs.rs serves rustdoc JSON with Content-Type: application/gzip,
         // which reqwest does not auto-decompress (it only handles
-        // Content-Encoding: gzip). Decompress manually.
-        let json_bytes = if bytes.starts_with(&[0x1f, 0x8b]) {
-            let mut decoder = GzDecoder::new(&bytes[..]);
-            let mut decompressed = Vec::new();
-            decoder
-                .read_to_end(&mut decompressed)
-                .map_err(|source| DocsRsError::Decompress {
-                    name: name.to_string(),
-                    source,
-                })?;
-            decompressed
-        } else {
-            bytes.to_vec()
-        };
+        // Content-Encoding: gzip). Decompress manually, enforcing the size
+        // limit on both the compressed body and the decompressed result.
+        let json_bytes = decode_body(name, &bytes, MAX_RESPONSE_BYTES)?;
 
         // Pre-check format version before full deserialization.
         let actual_version = serde_json::from_slice::<FormatVersionCheck>(&json_bytes)
@@ -242,6 +291,54 @@ mod tests {
         let client = DocsRsClient::with_base_url("test", &server.uri()).unwrap();
         let krate = client.fetch_rustdoc("serde", "latest").await.unwrap();
         assert_eq!(krate.crate_version.as_deref(), Some("1.0.0"));
+    }
+
+    #[test]
+    fn decode_body_rejects_oversized_compressed_body() {
+        // A compressed body larger than the limit is rejected before
+        // decompression.
+        let bytes = vec![0u8; 64];
+        let err = decode_body("huge", &bytes, 32).unwrap_err();
+        match err {
+            DocsRsError::ResponseTooLarge { name, size, limit } => {
+                assert_eq!(name, "huge");
+                assert_eq!(size, 64);
+                assert_eq!(limit, 32);
+            }
+            other => panic!("expected ResponseTooLarge, got: {other}"),
+        }
+    }
+
+    #[test]
+    fn decode_body_rejects_oversized_decompressed_payload() {
+        // A small gzip payload that decompresses to more than the limit is
+        // rejected (gzip-bomb protection).
+        let original = vec![b'a'; 4096];
+        let compressed = gzip_compress(&original);
+        // The compressed body is under the limit, but the decompressed output
+        // is not.
+        assert!((compressed.len() as u64) < 1024);
+        let err = decode_body("bomb", &compressed, 1024).unwrap_err();
+        match err {
+            DocsRsError::ResponseTooLarge { name, size, limit } => {
+                assert_eq!(name, "bomb");
+                assert!(size > 1024);
+                assert_eq!(limit, 1024);
+            }
+            other => panic!("expected ResponseTooLarge, got: {other}"),
+        }
+    }
+
+    #[test]
+    fn decode_body_accepts_within_limit() {
+        let original = synthetic_crate_json();
+        let compressed = gzip_compress(&original);
+        let decoded = decode_body("ok", &compressed, MAX_RESPONSE_BYTES).unwrap();
+        assert_eq!(decoded, original);
+
+        // Plain (non-gzip) bodies pass through unchanged.
+        let decoded_plain = decode_body("ok", &original, MAX_RESPONSE_BYTES).unwrap();
+        assert_eq!(decoded_plain, original);
     }
 
     #[tokio::test]
