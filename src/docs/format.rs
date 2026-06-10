@@ -888,4 +888,293 @@ mod tests {
             "mod"
         );
     }
+
+    // ── Helpers for building synthetic items and crates ───────────────────
+    //
+    // We construct a `Crate` from inline JSON (the same pattern used in
+    // `src/docs/cache.rs` and `tests/mcp_integration.rs`). Building each
+    // `Item` from JSON keeps the tests robust against `rustdoc_types`
+    // adding new struct fields with serde defaults.
+
+    /// Build JSON for an `Item` with the given id, name, docs, and inner.
+    fn item_json(
+        id: u32,
+        name: &str,
+        docs: Option<&str>,
+        inner: serde_json::Value,
+    ) -> serde_json::Value {
+        serde_json::json!({
+            "id": id,
+            "crate_id": 0,
+            "name": name,
+            "span": null,
+            "visibility": "public",
+            "docs": docs,
+            "links": {},
+            "attrs": [],
+            "deprecation": null,
+            "inner": inner,
+        })
+    }
+
+    /// Build JSON for a no-argument, unit-returning function inner.
+    fn function_inner() -> serde_json::Value {
+        serde_json::json!({
+            "function": {
+                "sig": { "inputs": [], "output": null, "is_c_variadic": false },
+                "generics": { "params": [], "where_predicates": [] },
+                "header": {
+                    "is_const": false,
+                    "is_unsafe": false,
+                    "is_async": false,
+                    "abi": "Rust"
+                },
+                "has_body": true
+            }
+        })
+    }
+
+    /// Build JSON for a unit-struct inner.
+    fn struct_inner() -> serde_json::Value {
+        serde_json::json!({
+            "struct": {
+                "kind": "unit",
+                "generics": { "params": [], "where_predicates": [] },
+                "impls": []
+            }
+        })
+    }
+
+    /// Build a `Crate` from a root module plus a set of item JSON values.
+    fn synthetic_crate(root_children: &[u32], items: Vec<serde_json::Value>) -> Crate {
+        let mut index = serde_json::Map::new();
+
+        // Root module (id 0) holding the listed children.
+        index.insert(
+            "0".to_string(),
+            item_json(
+                0,
+                "root_mod",
+                Some("Root module docs. Extra detail."),
+                serde_json::json!({
+                    "module": {
+                        "is_crate": true,
+                        "items": root_children,
+                        "is_stripped": false
+                    }
+                }),
+            ),
+        );
+
+        for item in items {
+            let id = item.get("id").and_then(|v| v.as_u64()).unwrap();
+            index.insert(id.to_string(), item);
+        }
+
+        let json = serde_json::json!({
+            "root": 0,
+            "crate_version": "1.0.0",
+            "includes_private": false,
+            "index": index,
+            "paths": {},
+            "external_crates": {},
+            "target": {
+                "triple": "x86_64-unknown-linux-gnu",
+                "target_features": []
+            },
+            "format_version": rustdoc_types::FORMAT_VERSION
+        });
+        serde_json::from_value(json).expect("synthetic crate should deserialize")
+    }
+
+    #[test]
+    fn format_module_listing_groups_items() {
+        let krate = synthetic_crate(
+            &[1, 2],
+            vec![
+                item_json(1, "do_thing", Some("Does a thing. More."), function_inner()),
+                item_json(2, "Widget", Some("A widget."), struct_inner()),
+            ],
+        );
+
+        let out = format_module_listing(&krate, &Id(0));
+
+        // Module heading and summary (first sentence only).
+        assert!(out.contains("# Module `root_mod`"));
+        assert!(out.contains("Root module docs."));
+        // Section headings for the two kinds present.
+        assert!(out.contains("## Functions"));
+        assert!(out.contains("## Structs"));
+        // Item names with their summaries.
+        assert!(out.contains("`do_thing` -- Does a thing."));
+        assert!(out.contains("`Widget` -- A widget."));
+        // No section for kinds that are absent.
+        assert!(!out.contains("## Enums"));
+        assert!(!out.contains("## Traits"));
+    }
+
+    #[test]
+    fn format_module_listing_empty_index() {
+        // An empty index means the root id is not present.
+        let json = serde_json::json!({
+            "root": 0,
+            "crate_version": "1.0.0",
+            "includes_private": false,
+            "index": {},
+            "paths": {},
+            "external_crates": {},
+            "target": {
+                "triple": "x86_64-unknown-linux-gnu",
+                "target_features": []
+            },
+            "format_version": rustdoc_types::FORMAT_VERSION
+        });
+        let krate: Crate = serde_json::from_value(json).unwrap();
+
+        let out = format_module_listing(&krate, &Id(0));
+        assert!(!out.is_empty());
+        assert_eq!(out, "Module not found in index.");
+    }
+
+    #[test]
+    fn format_module_listing_empty_module() {
+        // Root module present but with no children: graceful, non-empty output.
+        let krate = synthetic_crate(&[], vec![]);
+        let out = format_module_listing(&krate, &Id(0));
+        assert!(!out.is_empty());
+        assert!(out.contains("# Module `root_mod`"));
+        // With no children, no kind sections are emitted.
+        assert!(!out.contains("## Functions"));
+        assert!(!out.contains("## Structs"));
+    }
+
+    #[test]
+    fn format_module_listing_not_a_module() {
+        // Pointing the listing at a non-module item yields the guard message.
+        let krate = synthetic_crate(&[1], vec![item_json(1, "do_thing", None, function_inner())]);
+        let out = format_module_listing(&krate, &Id(1));
+        assert_eq!(out, "Item is not a module.");
+    }
+
+    #[test]
+    fn item_kind_labels_cover_common_variants() {
+        assert_eq!(
+            item_kind_label(&ItemEnum::Struct(Struct {
+                kind: StructKind::Unit,
+                generics: Generics {
+                    params: vec![],
+                    where_predicates: vec![],
+                },
+                impls: vec![],
+            })),
+            "struct"
+        );
+        assert_eq!(
+            item_kind_label(&ItemEnum::Enum(Enum {
+                generics: Generics {
+                    params: vec![],
+                    where_predicates: vec![],
+                },
+                has_stripped_variants: false,
+                variants: vec![],
+                impls: vec![],
+            })),
+            "enum"
+        );
+        assert_eq!(
+            item_kind_label(&ItemEnum::Function(Function {
+                sig: FunctionSignature {
+                    inputs: vec![],
+                    output: None,
+                    is_c_variadic: false,
+                },
+                generics: Generics {
+                    params: vec![],
+                    where_predicates: vec![],
+                },
+                header: FunctionHeader {
+                    is_const: false,
+                    is_unsafe: false,
+                    is_async: false,
+                    abi: Abi::Rust,
+                },
+                has_body: true,
+            })),
+            "fn"
+        );
+        assert_eq!(
+            item_kind_label(&ItemEnum::Trait(Trait {
+                is_auto: false,
+                is_unsafe: false,
+                is_dyn_compatible: true,
+                items: vec![],
+                generics: Generics {
+                    params: vec![],
+                    where_predicates: vec![],
+                },
+                bounds: vec![],
+                implementations: vec![],
+            })),
+            "trait"
+        );
+        assert_eq!(
+            item_kind_label(&ItemEnum::Constant {
+                type_: Type::Primitive("u32".to_string()),
+                const_: Constant {
+                    expr: "1".to_string(),
+                    value: Some("1".to_string()),
+                    is_literal: true,
+                },
+            }),
+            "const"
+        );
+        assert_eq!(
+            item_kind_label(&ItemEnum::TypeAlias(TypeAlias {
+                type_: Type::Primitive("u32".to_string()),
+                generics: Generics {
+                    params: vec![],
+                    where_predicates: vec![],
+                },
+            })),
+            "type"
+        );
+    }
+
+    #[test]
+    fn format_item_detail_function_with_docs() {
+        let krate = synthetic_crate(&[1], vec![]);
+        let item: Item = serde_json::from_value(item_json(
+            1,
+            "compute",
+            Some("Computes a value.\n\nLonger description here."),
+            function_inner(),
+        ))
+        .unwrap();
+
+        let out = format_item_detail(&krate, &item);
+
+        // Header for the function kind.
+        assert!(out.contains("# Function `compute`"));
+        // Rendered signature in a code block.
+        assert!(out.contains("```rust"));
+        assert!(out.contains("fn compute()"));
+        // Full docs are appended (not just the first sentence).
+        assert!(out.contains("Computes a value."));
+        assert!(out.contains("Longer description here."));
+    }
+
+    #[test]
+    fn format_item_detail_struct_renders_definition() {
+        let krate = synthetic_crate(&[1], vec![]);
+        let item: Item =
+            serde_json::from_value(item_json(1, "Widget", Some("A widget."), struct_inner()))
+                .unwrap();
+
+        let out = format_item_detail(&krate, &item);
+
+        assert!(out.contains("# Struct `Widget`"));
+        // Unit struct renders as `struct Widget;`.
+        assert!(out.contains("struct Widget;"));
+        assert!(out.contains("A widget."));
+    }
 }
