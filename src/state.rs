@@ -134,7 +134,20 @@ impl AppState {
     }
 }
 
-/// Helper to format large numbers in a human-readable way
+/// Helper to format large numbers in a human-readable way.
+///
+/// Numbers at or above one million are shown in `M`, at or above one thousand
+/// in `K`, each to one decimal place; smaller numbers are shown as-is.
+///
+/// # Examples
+///
+/// ```
+/// use cratesio_mcp::state::format_number;
+///
+/// assert_eq!(format_number(999), "999");
+/// assert_eq!(format_number(1_500), "1.5K");
+/// assert_eq!(format_number(2_500_000), "2.5M");
+/// ```
 pub fn format_number(n: u64) -> String {
     if n >= 1_000_000 {
         format!("{:.1}M", n as f64 / 1_000_000.0)
