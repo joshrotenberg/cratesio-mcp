@@ -77,6 +77,12 @@ struct Args {
     /// TTL for cached docs.rs rustdoc JSON entries (in seconds)
     #[arg(long, default_value = "3600")]
     docs_cache_ttl_secs: u64,
+
+    /// Log the client IP and User-Agent of a sampled subset of HTTP requests
+    /// (HTTP transport only). Off by default; enable for diagnosing the source
+    /// of unexpected traffic. Logs end-user IP addresses when on.
+    #[arg(long, default_value = "false")]
+    log_requests: bool,
 }
 
 #[tokio::main]
@@ -460,14 +466,20 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
                     .layer(builder.layer(McpTracingLayer::new()).into_inner())
             };
 
-            // Take over routing (instead of `transport.serve`) so we can add an
-            // HTTP-level middleware that logs the real client IP. The MCP-level
-            // `.layer()` stack above operates on parsed MCP requests and never
-            // sees `/health` or raw HTTP headers, so request-origin logging has
-            // to live out here, outside the MCP service.
-            let app = transport
-                .into_router()
-                .layer(axum::middleware::from_fn(log_http_request));
+            // Take over routing (instead of `transport.serve`) so we can
+            // optionally add an HTTP-level middleware that logs the real client
+            // IP. The MCP-level `.layer()` stack above operates on parsed MCP
+            // requests and never sees `/health` or raw HTTP headers, so
+            // request-origin logging has to live out here, outside the MCP
+            // service. Off by default: it logs end-user IPs, so it is opt-in
+            // via --log-requests for diagnosing unexpected traffic.
+            let mut app = transport.into_router();
+            if args.log_requests {
+                tracing::info!(
+                    "HTTP request-origin logging enabled (sampled 1 in {HTTP_LOG_SAMPLE_RATE})"
+                );
+                app = app.layer(axum::middleware::from_fn(log_http_request));
+            }
 
             let listener = tokio::net::TcpListener::bind(&addr).await?;
             tracing::info!("MCP HTTP transport listening on {}", addr);
