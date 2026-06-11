@@ -1,0 +1,22 @@
+# roba.toml -- cratesio-mcp dispatch config.
+#
+# Committed on purpose: roba discovers this file via its config pool
+# walk-up, so any roba invocation in this repo (yours or an agent's)
+# inherits these defaults. Safe by default -- with no `--profile`, roba's
+# built-in read-only posture applies (Read/Glob/Grep only). The powerful
+# posture is the NAMED `worker` profile below: an explicit opt-in
+# (`--profile worker`), never the auto-applied default.
+
+[profile.worker]
+# Unattended issue dispatch: full tool access, a capable model with an
+# opus fallback for the hard fixes, bounded by turn + dollar seatbelts.
+full_auto      = true
+model          = "sonnet"
+fallback_model = "opus"
+max_turns      = 40
+max_budget_usd = 2.0
+
+[profile.quick]
+# Cheap one-shots (trivial docs, surveys). Read-only by default; just a
+# cheaper model than `worker`.
+model = "haiku"
