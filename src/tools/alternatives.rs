@@ -375,6 +375,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn find_alternatives_crate_not_found() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/nonexistent-crate"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+
+        let state = test_state(&server.uri());
+        let tool = super::build(state);
+        let result = tool
+            .call(serde_json::json!({"name": "nonexistent-crate"}))
+            .await;
+
+        assert!(result.is_error);
+    }
+
+    #[tokio::test]
     async fn find_alternatives_custom_max_results() {
         let server = MockServer::start().await;
 

@@ -44,6 +44,7 @@ fn test_router(state: Arc<AppState>) -> McpRouter {
         .tool(tools::dependency_tree::build(state.clone()))
         .tool(tools::health_check::build(state.clone()))
         .tool(tools::changelog::build(state.clone()))
+        .tool(tools::alternatives::build(state.clone()))
         .resource(resources::recent_searches::build(state.clone()))
         .resource_template(resources::crate_info::build(state.clone()))
         .resource_template(resources::readme::build(state.clone()))
@@ -258,13 +259,13 @@ async fn mount_get_crate(server: &MockServer) {
 // ── Discovery tests ────────────────────────────────────────────────────────
 
 #[tokio::test]
-async fn list_tools_returns_all_21() {
+async fn list_tools_returns_all_24() {
     let server = MockServer::start().await;
     let mut client = initialized_client(&server).await;
 
     let tools = client.list_tools().await;
 
-    assert_eq!(tools.len(), 23);
+    assert_eq!(tools.len(), 24);
     let names: Vec<&str> = tools
         .iter()
         .filter_map(|t| t.get("name").and_then(|n| n.as_str()))
@@ -292,6 +293,7 @@ async fn list_tools_returns_all_21() {
     assert!(names.contains(&"get_dependency_tree"));
     assert!(names.contains(&"crate_health_check"));
     assert!(names.contains(&"get_crate_changelog"));
+    assert!(names.contains(&"find_alternatives"));
 }
 
 #[tokio::test]
@@ -1415,4 +1417,93 @@ async fn tool_crate_health_check() {
     assert!(text.contains("Dependency Weight"));
     assert!(text.contains("MIT OR Apache-2.0"));
     assert!(text.contains("None")); // no vulnerabilities
+}
+
+// ── Find alternatives tool test ────────────────────────────────────────────
+
+const GET_CRATE_AXUM_JSON: &str = r#"{
+    "crate": {
+        "name": "axum-mcp",
+        "updated_at": "2026-01-01T00:00:00.000000Z",
+        "keywords": ["ai", "mcp"],
+        "categories": ["asynchronous"],
+        "created_at": "2026-01-01T00:00:00.000000Z",
+        "downloads": 500,
+        "recent_downloads": 500,
+        "max_version": "0.1.0",
+        "max_stable_version": "0.1.0",
+        "description": "An MCP implementation using axum",
+        "homepage": null,
+        "documentation": null,
+        "repository": null
+    },
+    "versions": [
+        {
+            "num": "0.1.0",
+            "yanked": false,
+            "created_at": "2026-01-01T00:00:00.000000Z",
+            "downloads": 500,
+            "license": "MIT"
+        }
+    ]
+}"#;
+
+#[tokio::test]
+async fn tool_find_alternatives() {
+    let server = MockServer::start().await;
+
+    // Target crate (tower-mcp has keywords ["ai", "mcp"])
+    mount_get_crate(&server).await;
+
+    // Search for alternatives by keyword "ai mcp"
+    Mock::given(method("GET"))
+        .and(path("/crates"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "crates": [
+                {
+                    "name": "tower-mcp",
+                    "max_version": "0.6.0",
+                    "description": "Tower-native MCP implementation",
+                    "downloads": 1721,
+                    "recent_downloads": 1721,
+                    "created_at": "2026-01-28T16:29:05.281129Z",
+                    "updated_at": "2026-02-11T13:21:51.089324Z"
+                },
+                {
+                    "name": "axum-mcp",
+                    "max_version": "0.1.0",
+                    "description": "An MCP implementation using axum",
+                    "downloads": 500,
+                    "recent_downloads": 500,
+                    "created_at": "2026-01-01T00:00:00.000000Z",
+                    "updated_at": "2026-01-01T00:00:00.000000Z"
+                }
+            ],
+            "meta": { "total": 2 }
+        })))
+        .mount(&server)
+        .await;
+
+    // Alternative crate detail
+    Mock::given(method("GET"))
+        .and(path("/crates/axum-mcp"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(GET_CRATE_AXUM_JSON, "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    let mut client = initialized_client(&server).await;
+    let result = client
+        .call_tool(
+            "find_alternatives",
+            serde_json::json!({"name": "tower-mcp"}),
+        )
+        .await;
+
+    assert!(!result.is_error);
+    let text = result.all_text();
+    assert!(text.contains("Alternatives to `tower-mcp`"));
+    assert!(text.contains("axum-mcp"));
+    assert!(text.contains("*(target)*"));
 }
