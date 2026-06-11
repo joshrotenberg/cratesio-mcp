@@ -40,17 +40,21 @@ jobs:
       - name: Verify deployment (health check)
         run: |
           echo "Waiting for server to be ready..."
-          sleep 10
-
-          echo "Checking health endpoint..."
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://cratesio-mcp.fly.dev/health)
-
-          if [ "$HTTP_STATUS" = "200" ]; then
-            echo "Health check passed!"
-          else
-            echo "Health check failed with status: $HTTP_STATUS"
-            exit 1
-          fi
+          MAX_RETRIES=6
+          RETRY_DELAY=10
+          for attempt in $(seq 1 $MAX_RETRIES); do
+            # Tolerate transient connect/TLS errors while the machine comes up
+            # (a single early curl false-failed the v0.2.0 release run).
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://cratesio-mcp.fly.dev/health || echo "000")
+            echo "Attempt $attempt/$MAX_RETRIES: HTTP $HTTP_STATUS"
+            if [ "$HTTP_STATUS" = "200" ]; then
+              echo "Health check passed!"
+              exit 0
+            fi
+            sleep $RETRY_DELAY
+          done
+          echo "Health check failed after $MAX_RETRIES attempts"
+          exit 1
 
       - name: Verify deployment (MCP protocol)
         run: |

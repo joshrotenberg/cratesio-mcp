@@ -24,6 +24,16 @@ primary_region = "sjc"
     hard_limit = 35
     soft_limit = 25
 
+  # Fly-managed HTTP health check on /health. A failing check makes a deploy
+  # fail (instead of "succeeding" while the app serves nothing -- the gap that
+  # hid the v0.2.0 outage) and stops the proxy routing to an unhealthy machine.
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+
 [[vm]]
   memory = "256mb"
   cpu_kind = "shared"
