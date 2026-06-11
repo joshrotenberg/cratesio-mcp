@@ -11,9 +11,12 @@ primary_region = "sjc"
   internal_port = 3000
   force_https = true
   auto_stop_machines = "suspend"
-  auto_start_machines = false
-  # Single-instance is the deliberate design for this demo/reference deployment.
-  # MCP sessions are in-memory; scale-out would require a shared session store (see #93).
+  # auto_start_machines MUST stay true: with suspend + min_machines_running, the
+  # Fly proxy needs auto-start to wake/replace the single machine after it stops
+  # (e.g. post-deploy). Setting it false left the app with zero serving machines
+  # after a deploy (HTTP 000 outage). Single-instance is still enforced by
+  # min_machines_running = 1 + max below; in-memory sessions, see #93.
+  auto_start_machines = true
   min_machines_running = 1
   processes = ["app"]
   [http_service.concurrency]
