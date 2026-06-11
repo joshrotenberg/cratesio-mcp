@@ -48,7 +48,7 @@ struct Args {
     #[arg(short, long, default_value = "3000")]
     port: u16,
 
-    /// Request timeout in seconds (for HTTP transport inbound requests)
+    /// Request timeout in seconds (inbound requests, all transports)
     #[arg(long, default_value = "30")]
     request_timeout_secs: u64,
 
@@ -379,10 +379,28 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
 
     match args.transport {
         Transport::Stdio => {
-            // For stdio, we serve directly without middleware since error handling
-            // is more complex (would need error type conversion).
             tracing::info!("Serving over stdio");
-            StdioTransport::new(router).run().await?;
+            let rate_limiter = RateLimiterLayer::builder()
+                .limit_for_period(10)
+                .refresh_period(Duration::from_secs(1))
+                .timeout_duration(Duration::from_millis(500))
+                .build();
+
+            let bulkhead = BulkheadLayer::builder()
+                .max_concurrent_calls(args.max_concurrent)
+                .max_wait_duration(Duration::from_millis(500))
+                .build();
+
+            let mut transport = StdioTransport::new(router).layer(
+                ServiceBuilder::new()
+                    .layer(TimeoutLayer::new(Duration::from_secs(
+                        args.request_timeout_secs,
+                    )))
+                    .layer(rate_limiter)
+                    .layer(bulkhead)
+                    .into_inner(),
+            );
+            transport.run().await?;
         }
         Transport::Http => {
             let addr = format!("{}:{}", args.host, args.port);
