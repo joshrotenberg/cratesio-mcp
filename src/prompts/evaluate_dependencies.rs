@@ -15,7 +15,7 @@ pub fn build() -> Prompt {
 
             let mut prompt = format!(
                 "Please evaluate the following Rust dependencies: {}\n\n\
-                 For each crate, run `crate_health_check` to gather comprehensive data, then assess:\n\n\
+                 For each crate, run `get_crate_health` to gather comprehensive data, then assess:\n\n\
                  1. **Staleness**: Flag crates with no recent releases or inactive maintenance\n\
                  2. **Security**: Identify any known vulnerabilities or audit concerns\n\
                  3. **Adoption**: Flag low-download or low-ecosystem-usage crates\n\

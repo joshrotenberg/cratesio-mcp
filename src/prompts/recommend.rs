@@ -29,7 +29,7 @@ pub fn build() -> Prompt {
                  (e.g. framework names, problem domain, key features needed)\n\n\
                  2. **Search for candidates**: Use search_crates with those keywords to find \
                  up to {} candidate crates\n\n\
-                 3. **Health check top results**: Run crate_health_check on the most promising \
+                 3. **Health check top results**: Run get_crate_health on the most promising \
                  candidates to get comprehensive quality data\n\n\
                  4. **Compare on key dimensions**:\n\
                  - Downloads (total and recent trends)\n\

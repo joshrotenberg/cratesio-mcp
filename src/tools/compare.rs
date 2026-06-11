@@ -14,8 +14,8 @@ use crate::state::{AppState, format_number};
 /// Input for comparing crates
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct CompareInput {
-    /// Comma-separated list of crate names to compare (2-5 crates)
-    crates: String,
+    /// List of crate names to compare (2-5 crates)
+    crates: Vec<String>,
 }
 
 pub fn build(state: Arc<AppState>) -> Tool {
@@ -31,7 +31,7 @@ pub fn build(state: Arc<AppState>) -> Tool {
         .extractor_handler(
             state,
             |State(state): State<Arc<AppState>>, Json(input): Json<CompareInput>| async move {
-                let names: Vec<&str> = input.crates.split(',').map(|s| s.trim()).collect();
+                let names: Vec<&str> = input.crates.iter().map(|s| s.trim()).collect();
 
                 if names.len() < 2 {
                     return Ok(CallToolResult::text(
@@ -265,7 +265,7 @@ mod tests {
         let state = test_state(&server.uri());
         let tool = super::build(state);
         let result = tool
-            .call(serde_json::json!({"crates": "good-crate, bad-crate"}))
+            .call(serde_json::json!({"crates": ["good-crate", "bad-crate"]}))
             .await;
 
         let text = result.all_text();
@@ -284,7 +284,7 @@ mod tests {
         let tool = super::build(state);
 
         let result = tool
-            .call(serde_json::json!({"crates": "a, b, c, d, e, f"}))
+            .call(serde_json::json!({"crates": ["a", "b", "c", "d", "e", "f"]}))
             .await;
 
         let text = result.all_text();

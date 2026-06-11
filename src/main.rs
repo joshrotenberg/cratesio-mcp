@@ -151,8 +151,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
     let user_stats_tool = tools::user_stats::build(state.clone());
     let compare_tool = tools::compare::build(state.clone());
     let dependency_tree_tool = tools::dependency_tree::build(state.clone());
-    let health_check_tool = tools::health_check::build(state.clone());
-    let find_alternatives_tool = tools::alternatives::build(state.clone());
+    let get_crate_health_tool = tools::health_check::build(state.clone());
+    let get_alternatives_tool = tools::alternatives::build(state.clone());
     let changelog_tool = tools::changelog::build(state.clone());
 
     // Create base router with tools (always registered)
@@ -184,8 +184,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - get_user_stats: Get download statistics for a crates.io user\n\
          - compare_crates: Compare two or more crates side by side\n\
          - get_dependency_tree: Get full transitive dependency tree for a crate\n\
-         - crate_health_check: Comprehensive health report for a crate\n\
-         - find_alternatives: Find and compare alternative crates for a given crate\n\
+         - get_crate_health: Comprehensive health report for a crate\n\
+         - get_alternatives: Find and compare alternative crates for a given crate\n\
          - get_crate_changelog: Fetch changelog from a crate's GitHub repository\n\n\
          (Running in minimal mode - resources, prompts, and completions disabled)"
     } else {
@@ -216,8 +216,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - get_user_stats: Get download statistics for a crates.io user\n\
          - compare_crates: Compare two or more crates side by side\n\
          - get_dependency_tree: Get full transitive dependency tree for a crate\n\
-         - crate_health_check: Comprehensive health report for a crate\n\
-         - find_alternatives: Find and compare alternative crates for a given crate\n\
+         - get_crate_health: Comprehensive health report for a crate\n\
+         - get_alternatives: Find and compare alternative crates for a given crate\n\
          - get_crate_changelog: Fetch changelog from a crate's GitHub repository\n\n\
          Resources:\n\
          - crates://{name}/info: Get crate info as a resource\n\
@@ -225,7 +225,7 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
          - crates://{name}/docs: Get documentation structure for a crate\n\n\
          Use the prompts for guided analysis:\n\
          - analyze_crate: Comprehensive crate analysis\n\
-         - compare_crates: Compare multiple crates\n\
+         - compare_crates_analysis: Compare multiple crates\n\
          - stack_review: Evaluate a set of crates as a cohesive stack\n\
          - evaluate_dependencies: Evaluate project dependencies for health and security\n\
          - recommend_crates: Find and evaluate crates for a use case\n\
@@ -260,8 +260,8 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
         .tool(user_stats_tool)
         .tool(compare_tool)
         .tool(dependency_tree_tool)
-        .tool(health_check_tool)
-        .tool(find_alternatives_tool)
+        .tool(get_crate_health_tool)
+        .tool(get_alternatives_tool)
         .tool(changelog_tool);
 
     // Add resources, prompts, and completions unless in minimal mode

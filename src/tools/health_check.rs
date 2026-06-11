@@ -23,7 +23,7 @@ pub struct HealthCheckInput {
 }
 
 pub fn build(state: Arc<AppState>) -> Tool {
-    ToolBuilder::new("crate_health_check")
+    ToolBuilder::new("get_crate_health")
         .title("Crate Health Check")
         .description(
             "Comprehensive health check for a crate. Combines multiple API calls into a single \

@@ -21,7 +21,7 @@ pub fn build() -> Prompt {
             let mut prompt = format!(
                 "Please evaluate the following Rust crates as a cohesive stack: {}\n\n\
                  Use the available tools to perform a thorough stack review:\n\n\
-                 1. **Health Check**: Run crate_health_check on each crate to assess individual health\n\
+                 1. **Health Check**: Run get_crate_health on each crate to assess individual health\n\
                  2. **Dependency Analysis**: Run get_dependencies on each crate to identify shared \
                  transitive dependencies and potential version conflicts\n\
                  3. **Overlap Detection**: Check for overlapping functionality across the stack \

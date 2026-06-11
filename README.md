@@ -119,8 +119,8 @@ Add to `claude_desktop_config.json`:
 | `get_keyword` | Details for a specific keyword |
 | `compare_crates` | Compare two or more crates side by side (downloads, versions, dependencies, freshness) |
 | `get_dependency_tree` | Full transitive dependency tree with configurable depth and deduplication markers |
-| `crate_health_check` | Comprehensive health report (maturity, adoption, maintenance, security, dependency weight) |
-| `find_alternatives` | Find and compare alternative crates based on keywords, downloads, and recent activity |
+| `get_crate_health` | Comprehensive health report (maturity, adoption, maintenance, security, dependency weight) |
+| `get_alternatives` | Find and compare alternative crates based on keywords, downloads, and recent activity |
 | `get_crate_changelog` | Changelog content from a crate's GitHub repository, optionally filtered to a version |
 
 ### Resources (4)
@@ -137,7 +137,7 @@ Add to `claude_desktop_config.json`:
 | Prompt | Description |
 |--------|-------------|
 | `analyze_crate` | Guided comprehensive crate analysis |
-| `compare_crates` | Compare multiple crates side by side |
+| `compare_crates_analysis` | Compare multiple crates side by side |
 | `stack_review` | Evaluate a set of crates as a cohesive stack for compatibility and health |
 | `evaluate_dependencies` | Evaluate a project's dependencies for health, security, and maintenance |
 | `recommend_crates` | Find and evaluate crates for a given use case |

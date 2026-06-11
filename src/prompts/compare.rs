@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use tower_mcp::{GetPromptResult, Prompt, PromptBuilder, PromptMessage, PromptRole};
 
 pub fn build() -> Prompt {
-    PromptBuilder::new("compare_crates")
+    PromptBuilder::new("compare_crates_analysis")
         .description("Compare two or more crates for a specific use case")
         .required_arg("crates", "Comma-separated list of crate names to compare")
         .required_arg("use_case", "What you want to use these crates for")

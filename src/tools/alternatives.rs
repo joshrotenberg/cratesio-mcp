@@ -27,7 +27,7 @@ fn default_max_results() -> usize {
 }
 
 pub fn build(state: Arc<AppState>) -> Tool {
-    ToolBuilder::new("find_alternatives")
+    ToolBuilder::new("get_alternatives")
         .title("Find Alternatives")
         .description(
             "Find and compare alternative crates for a given crate. Uses the crate's keywords \

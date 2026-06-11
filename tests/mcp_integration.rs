@@ -291,9 +291,9 @@ async fn list_tools_returns_all_24() {
     assert!(names.contains(&"get_user_stats"));
     assert!(names.contains(&"compare_crates"));
     assert!(names.contains(&"get_dependency_tree"));
-    assert!(names.contains(&"crate_health_check"));
+    assert!(names.contains(&"get_crate_health"));
     assert!(names.contains(&"get_crate_changelog"));
-    assert!(names.contains(&"find_alternatives"));
+    assert!(names.contains(&"get_alternatives"));
 }
 
 #[tokio::test]
@@ -344,7 +344,7 @@ async fn list_prompts_returns_both() {
         .filter_map(|p| p.get("name").and_then(|n| n.as_str()))
         .collect();
     assert!(names.contains(&"analyze_crate"));
-    assert!(names.contains(&"compare_crates"));
+    assert!(names.contains(&"compare_crates_analysis"));
 }
 
 // ── Tool tests ─────────────────────────────────────────────────────────────
@@ -895,7 +895,7 @@ async fn tool_compare_crates() {
 
     let mut client = initialized_client(&server).await;
     let result = client
-        .call_tool("compare_crates", json!({"crates": "tower-mcp, serde"}))
+        .call_tool("compare_crates", json!({"crates": ["tower-mcp", "serde"]}))
         .await;
 
     assert!(!result.is_error);
@@ -917,7 +917,7 @@ async fn tool_compare_crates_too_few() {
     let server = MockServer::start().await;
     let mut client = initialized_client(&server).await;
     let result = client
-        .call_tool("compare_crates", json!({"crates": "serde"}))
+        .call_tool("compare_crates", json!({"crates": ["serde"]}))
         .await;
 
     assert!(!result.is_error);
@@ -1283,14 +1283,14 @@ async fn prompt_analyze_crate_with_use_case() {
 }
 
 #[tokio::test]
-async fn prompt_compare_crates() {
+async fn prompt_compare_crates_analysis() {
     let server = MockServer::start().await;
     let mut client = initialized_client(&server).await;
 
     let mut args = HashMap::new();
     args.insert("crates".to_string(), "serde, bincode".to_string());
     args.insert("use_case".to_string(), "binary serialization".to_string());
-    let result = client.get_prompt("compare_crates", args).await;
+    let result = client.get_prompt("compare_crates_analysis", args).await;
 
     let text = result.first_message_text().expect("expected message text");
     assert!(text.contains("serde"));
@@ -1357,7 +1357,7 @@ async fn tool_get_dependency_tree() {
 // ── Health check tool test ─────────────────────────────────────────────
 
 #[tokio::test]
-async fn tool_crate_health_check() {
+async fn tool_get_crate_health() {
     let crates_server = MockServer::start().await;
     let docsrs_server = MockServer::start().await;
     let osv_server = MockServer::start().await;
@@ -1403,7 +1403,7 @@ async fn tool_crate_health_check() {
 
     let mut client = full_initialized_client(&crates_server, &docsrs_server, &osv_server).await;
     let result = client
-        .call_tool("crate_health_check", json!({"name": "tower-mcp"}))
+        .call_tool("get_crate_health", json!({"name": "tower-mcp"}))
         .await;
 
     assert!(!result.is_error);
@@ -1449,7 +1449,7 @@ const GET_CRATE_AXUM_JSON: &str = r#"{
 }"#;
 
 #[tokio::test]
-async fn tool_find_alternatives() {
+async fn tool_get_alternatives() {
     let server = MockServer::start().await;
 
     // Target crate (tower-mcp has keywords ["ai", "mcp"])
@@ -1495,10 +1495,7 @@ async fn tool_find_alternatives() {
 
     let mut client = initialized_client(&server).await;
     let result = client
-        .call_tool(
-            "find_alternatives",
-            serde_json::json!({"name": "tower-mcp"}),
-        )
+        .call_tool("get_alternatives", serde_json::json!({"name": "tower-mcp"}))
         .await;
 
     assert!(!result.is_error);
