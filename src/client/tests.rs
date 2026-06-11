@@ -8,6 +8,43 @@ use super::types::{
     CrateSettings, NewGitHubConfig, NewGitLabConfig, PublishMetadata, VersionSettings,
 };
 
+// ── backoff_for ──────────────────────────────────────────────────────────────
+
+#[test]
+fn backoff_for_small_attempts_are_uncapped() {
+    let client = CratesIoClient::with_base_url(
+        "test-agent",
+        Duration::from_millis(0),
+        Duration::from_secs(30),
+        "http://localhost",
+    )
+    .unwrap()
+    .with_initial_backoff(Duration::from_millis(500));
+
+    assert_eq!(client.backoff_for(0), Duration::from_millis(500)); // 500ms * 2^0 = 500ms
+    assert_eq!(client.backoff_for(1), Duration::from_millis(1000)); // 500ms * 2^1 = 1s
+    assert_eq!(client.backoff_for(2), Duration::from_millis(2000)); // 500ms * 2^2 = 2s
+}
+
+#[test]
+fn backoff_for_large_attempt_is_capped_at_30s() {
+    let client = CratesIoClient::with_base_url(
+        "test-agent",
+        Duration::from_millis(0),
+        Duration::from_secs(30),
+        "http://localhost",
+    )
+    .unwrap()
+    .with_initial_backoff(Duration::from_millis(500));
+
+    // attempt=40 would overflow u32 with plain pow; must not panic and must cap at 30s
+    assert_eq!(client.backoff_for(40), Duration::from_secs(30));
+    // attempt=32 would also overflow; also capped
+    assert_eq!(client.backoff_for(32), Duration::from_secs(30));
+    // attempt=19: 500ms * 2^19 = ~73 hours without cap; capped at 30s
+    assert_eq!(client.backoff_for(19), Duration::from_secs(30));
+}
+
 /// Create a client pointed at the mock server with no rate limiting and retries disabled.
 fn test_client(base_url: &str) -> CratesIoClient {
     CratesIoClient::with_base_url(

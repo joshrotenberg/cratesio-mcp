@@ -159,6 +159,18 @@ impl CratesIoClient {
         *last = Some(Instant::now());
     }
 
+    /// Compute the capped exponential backoff for a given attempt number.
+    ///
+    /// Uses saturating arithmetic to avoid overflow for large attempt values, and
+    /// clamps the result to 30 seconds so a misconfigured max_retries cannot
+    /// produce multi-hour sleeps.
+    fn backoff_for(&self, attempt: u32) -> Duration {
+        let raw_multiplier = 2u32.saturating_pow(attempt);
+        self.initial_backoff
+            .saturating_mul(raw_multiplier)
+            .min(Duration::from_secs(30))
+    }
+
     /// Execute an HTTP request with exponential backoff retry on 429 and 5xx responses.
     ///
     /// `make_request` is called once per attempt. Retries are only performed for
@@ -183,7 +195,7 @@ impl CratesIoClient {
                 status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error();
 
             if retryable && attempt < self.max_retries {
-                let backoff = self.initial_backoff * 2u32.pow(attempt);
+                let backoff = self.backoff_for(attempt);
                 tracing::warn!(
                     attempt = attempt + 1,
                     max_retries = self.max_retries,
