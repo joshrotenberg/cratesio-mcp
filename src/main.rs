@@ -465,9 +465,19 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
                                 let args_str = serde_json::to_string(arguments).unwrap_or_default();
                                 format!("tool:{}:{}", name, args_str)
                             }
-                            // For all other requests, use unique key based on request ID
-                            // This ensures they're never cached (each request ID is unique)
-                            _ => format!("nocache:{:?}", req.id),
+                            // All other methods bypass the cache. Use a
+                            // process-unique counter -- NOT the client-supplied
+                            // request id, which a client may reuse and thereby
+                            // collide on a stale entry (see #132) -- so each
+                            // non-tool request gets a key that can never hit.
+                            _ => {
+                                use std::sync::atomic::{AtomicU64, Ordering};
+                                static NON_TOOL_NONCE: AtomicU64 = AtomicU64::new(0);
+                                format!(
+                                    "nocache:{}",
+                                    NON_TOOL_NONCE.fetch_add(1, Ordering::Relaxed)
+                                )
+                            }
                         }
                     })
                     .on_hit(|| tracing::debug!("Cache hit"))
