@@ -26,7 +26,16 @@ jobs:
         uses: superfly/flyctl-actions/setup-flyctl@master
 
       - name: Deploy to Fly.io
-        run: flyctl deploy --remote-only
+        run: flyctl deploy --remote-only --strategy immediate
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Reap stale machines
+        run: |
+          echo "Destroying any stopped/suspended machines left from the deploy..."
+          flyctl machines list --json | jq -r '.[] | select(.state != "started") | .id' | xargs -I{} flyctl machines destroy {} --force || true
+          echo "Active machines after reap:"
+          flyctl machines list
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 

@@ -11,14 +11,15 @@ primary_region = "sjc"
   internal_port = 3000
   force_https = true
   auto_stop_machines = "suspend"
-  auto_start_machines = true
-  # MCP HTTP sessions are stored in-memory, so we need exactly 1 instance
+  auto_start_machines = false
+  # Single-instance is the deliberate design for this demo/reference deployment.
+  # MCP sessions are in-memory; scale-out would require a shared session store (see #93).
   min_machines_running = 1
   processes = ["app"]
   [http_service.concurrency]
     type = "requests"
-    hard_limit = 100
-    soft_limit = 80
+    hard_limit = 35
+    soft_limit = 25
 
 [[vm]]
   memory = "256mb"
