@@ -1444,7 +1444,7 @@ async fn accept_invitation_by_token_sends_put() {
     let server = MockServer::start().await;
 
     Mock::given(method("PUT"))
-        .and(path("/crate_owner_invitations/abc123"))
+        .and(path("/me/crate_owner_invitations/accept/abc123"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "crate_owner_invitation": {
                 "accepted": true,
@@ -1638,7 +1638,7 @@ async fn list_github_configs_returns_list() {
     let server = MockServer::start().await;
 
     Mock::given(method("GET"))
-        .and(path("/trustpub/github_configs"))
+        .and(path("/trusted_publishing/github_configs"))
         .and(header("Authorization", "test-token"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "github_configs": [{
@@ -1672,7 +1672,7 @@ async fn create_github_config_sends_post() {
     let server = MockServer::start().await;
 
     Mock::given(method("POST"))
-        .and(path("/trustpub/github_configs"))
+        .and(path("/trusted_publishing/github_configs"))
         .and(header("Authorization", "test-token"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "github_config": {
@@ -1710,7 +1710,7 @@ async fn delete_github_config_sends_delete() {
     let server = MockServer::start().await;
 
     Mock::given(method("DELETE"))
-        .and(path("/trustpub/github_configs/1"))
+        .and(path("/trusted_publishing/github_configs/1"))
         .and(header("Authorization", "test-token"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
         .expect(1)
@@ -1728,7 +1728,7 @@ async fn list_gitlab_configs_returns_list() {
     let server = MockServer::start().await;
 
     Mock::given(method("GET"))
-        .and(path("/trustpub/gitlab_configs"))
+        .and(path("/trusted_publishing/gitlab_configs"))
         .and(header("Authorization", "test-token"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "gitlab_configs": [{
@@ -1759,7 +1759,7 @@ async fn create_gitlab_config_sends_post() {
     let server = MockServer::start().await;
 
     Mock::given(method("POST"))
-        .and(path("/trustpub/gitlab_configs"))
+        .and(path("/trusted_publishing/gitlab_configs"))
         .and(header("Authorization", "test-token"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "gitlab_config": {
@@ -1793,7 +1793,7 @@ async fn delete_gitlab_config_sends_delete() {
     let server = MockServer::start().await;
 
     Mock::given(method("DELETE"))
-        .and(path("/trustpub/gitlab_configs/1"))
+        .and(path("/trusted_publishing/gitlab_configs/1"))
         .and(header("Authorization", "test-token"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
         .expect(1)
@@ -1811,7 +1811,7 @@ async fn exchange_oidc_token_sends_post() {
     let server = MockServer::start().await;
 
     Mock::given(method("POST"))
-        .and(path("/trustpub/tokens/exchange"))
+        .and(path("/trusted_publishing/tokens"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "token": "cio-publish-token-abc"
         })))
@@ -1833,7 +1833,7 @@ async fn revoke_trusted_token_sends_delete() {
     let server = MockServer::start().await;
 
     Mock::given(method("DELETE"))
-        .and(path("/trustpub/tokens/42"))
+        .and(path("/trusted_publishing/tokens"))
         .and(header("Authorization", "test-token"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
         .expect(1)
@@ -1841,7 +1841,7 @@ async fn revoke_trusted_token_sends_delete() {
         .await;
 
     let client = test_client(&server.uri()).with_auth("test-token");
-    client.revoke_trusted_token(42).await.unwrap();
+    client.revoke_trusted_token().await.unwrap();
 }
 
 // ── retry ────────────────────────────────────────────────────────────────────

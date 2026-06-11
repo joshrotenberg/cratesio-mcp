@@ -16,7 +16,9 @@ impl CratesIoClient {
     ///
     /// Requires authentication.
     pub async fn list_github_configs(&self) -> Result<Vec<GitHubConfig>, Error> {
-        let resp: GitHubConfigsResponse = self.get_json_auth("/trustpub/github_configs").await?;
+        let resp: GitHubConfigsResponse = self
+            .get_json_auth("/trusted_publishing/github_configs")
+            .await?;
         Ok(resp.github_configs)
     }
 
@@ -30,7 +32,9 @@ impl CratesIoClient {
         let body = CreateGitHubConfigRequest {
             github_config: config,
         };
-        let resp: GitHubConfigResponse = self.post_json("/trustpub/github_configs", &body).await?;
+        let resp: GitHubConfigResponse = self
+            .post_json("/trusted_publishing/github_configs", &body)
+            .await?;
         Ok(resp.github_config)
     }
 
@@ -38,7 +42,7 @@ impl CratesIoClient {
     ///
     /// Requires authentication.
     pub async fn delete_github_config(&self, id: u64) -> Result<(), Error> {
-        self.delete_ok(&format!("/trustpub/github_configs/{id}"))
+        self.delete_ok(&format!("/trusted_publishing/github_configs/{id}"))
             .await
     }
 
@@ -48,7 +52,9 @@ impl CratesIoClient {
     ///
     /// Requires authentication.
     pub async fn list_gitlab_configs(&self) -> Result<Vec<GitLabConfig>, Error> {
-        let resp: GitLabConfigsResponse = self.get_json_auth("/trustpub/gitlab_configs").await?;
+        let resp: GitLabConfigsResponse = self
+            .get_json_auth("/trusted_publishing/gitlab_configs")
+            .await?;
         Ok(resp.gitlab_configs)
     }
 
@@ -62,7 +68,9 @@ impl CratesIoClient {
         let body = CreateGitLabConfigRequest {
             gitlab_config: config,
         };
-        let resp: GitLabConfigResponse = self.post_json("/trustpub/gitlab_configs", &body).await?;
+        let resp: GitLabConfigResponse = self
+            .post_json("/trusted_publishing/gitlab_configs", &body)
+            .await?;
         Ok(resp.gitlab_config)
     }
 
@@ -70,7 +78,7 @@ impl CratesIoClient {
     ///
     /// Requires authentication.
     pub async fn delete_gitlab_config(&self, id: u64) -> Result<(), Error> {
-        self.delete_ok(&format!("/trustpub/gitlab_configs/{id}"))
+        self.delete_ok(&format!("/trusted_publishing/gitlab_configs/{id}"))
             .await
     }
 
@@ -85,15 +93,18 @@ impl CratesIoClient {
             jwt: jwt.to_string(),
         };
         let resp: OidcExchangeResponse = self
-            .post_json_unauth("/trustpub/tokens/exchange", &body)
+            .post_json_unauth("/trusted_publishing/tokens", &body)
             .await?;
         Ok(resp.token)
     }
 
-    /// Revoke a trusted publishing token.
+    /// Revoke the current temporary trusted-publishing access token.
     ///
-    /// Requires authentication.
-    pub async fn revoke_trusted_token(&self, id: u64) -> Result<(), Error> {
-        self.delete_ok(&format!("/trustpub/tokens/{id}")).await
+    /// Per the crates.io API this revokes the temporary token previously
+    /// obtained from [`exchange_oidc_token`](Self::exchange_oidc_token); the
+    /// endpoint takes no id and is authenticated by that temporary token
+    /// itself (not a regular crates.io API token).
+    pub async fn revoke_trusted_token(&self) -> Result<(), Error> {
+        self.delete_ok("/trusted_publishing/tokens").await
     }
 }

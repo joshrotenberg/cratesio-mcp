@@ -89,7 +89,7 @@ impl CratesIoClient {
     /// Accept an owner invitation using a token (from email link).
     pub async fn accept_invitation_by_token(&self, token: &str) -> Result<u64, Error> {
         let resp: InvitationTokenResponse = self
-            .put_empty_json(&format!("/crate_owner_invitations/{token}"))
+            .put_empty_json(&format!("/me/crate_owner_invitations/accept/{token}"))
             .await?;
         Ok(resp.crate_owner_invitation.crate_id)
     }
