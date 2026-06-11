@@ -10,11 +10,14 @@
 [profile.worker]
 # Unattended issue dispatch: full tool access, a capable model with an
 # opus fallback for the hard fixes, bounded by turn + dollar seatbelts.
+# max_turns is high because a real fix can cascade a signature change
+# across many call sites (a 14-file change exhausted 40 turns before it
+# could gate + commit); the dollar cap is the real seatbelt.
 full_auto      = true
 model          = "sonnet"
 fallback_model = "opus"
-max_turns      = 40
-max_budget_usd = 2.0
+max_turns      = 80
+max_budget_usd = 10.0
 
 [profile.quick]
 # Cheap one-shots (trivial docs, surveys). Read-only by default; just a
