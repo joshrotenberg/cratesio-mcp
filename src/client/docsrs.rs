@@ -278,7 +278,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
+        let client =
+            DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
         let krate = client.fetch_rustdoc("serde", "latest").await.unwrap();
         assert_eq!(krate.crate_version.as_deref(), Some("1.0.0"));
     }
@@ -296,7 +297,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
+        let client =
+            DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
         let krate = client.fetch_rustdoc("serde", "latest").await.unwrap();
         assert_eq!(krate.crate_version.as_deref(), Some("1.0.0"));
     }
@@ -358,7 +360,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
+        let client =
+            DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
         let err = client
             .fetch_rustdoc("nonexistent", "latest")
             .await
@@ -375,7 +378,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
+        let client =
+            DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
         let err = client.fetch_rustdoc("oldcrate", "0.1.0").await.unwrap_err();
         assert!(matches!(err, DocsRsError::DocsNotAvailable { .. }));
     }
@@ -393,7 +397,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
+        let client =
+            DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
         let err = client.fetch_rustdoc("bad", "latest").await.unwrap_err();
         assert!(matches!(err, DocsRsError::Parse { .. }));
     }
@@ -414,7 +419,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
+        let client =
+            DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
         // Should succeed despite version mismatch (structure is compatible)
         let krate = client.fetch_rustdoc("testcrate", "latest").await.unwrap();
         assert_eq!(krate.crate_version.as_deref(), Some("1.0.0"));
@@ -441,7 +447,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
+        let client =
+            DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
         let err = client
             .fetch_rustdoc("badcrate", "latest")
             .await

@@ -221,8 +221,7 @@ mod tests {
             .unwrap(),
             docsrs_client: DocsRsClient::with_base_url("test", Duration::from_secs(30), crates_url)
                 .unwrap(),
-            osv_client: OsvClient::with_base_url("test", Duration::from_secs(30), osv_url)
-                .unwrap(),
+            osv_client: OsvClient::with_base_url("test", Duration::from_secs(30), osv_url).unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
             recent_searches: RwLock::new(Vec::new()),
         })
