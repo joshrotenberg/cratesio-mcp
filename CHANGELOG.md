@@ -2,6 +2,57 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-06-11
+
+### Bug Fixes
+
+- Add #[serde(default)] to optional version params on 5 tools ([#99](https://github.com/joshrotenberg/cratesio-mcp/pull/99))
+- Bound rustdoc JSON response size from docs.rs ([#103](https://github.com/joshrotenberg/cratesio-mcp/pull/103))
+- Bound get_crate_readme response size ([#108](https://github.com/joshrotenberg/cratesio-mcp/pull/108))
+- Bound outbound HTTP calls with a per-request timeout (closes #88) ([#112](https://github.com/joshrotenberg/cratesio-mcp/pull/112))
+- Cap retry backoff with saturating math (closes #90) ([#115](https://github.com/joshrotenberg/cratesio-mcp/pull/115))
+- Cap unique crates in dependency tree to bound API calls (closes #92) ([#121](https://github.com/joshrotenberg/cratesio-mcp/pull/121))
+- Apply timeout/rate-limit/bulkhead middleware to stdio transport (closes #91) ([#123](https://github.com/joshrotenberg/cratesio-mcp/pull/123))
+
+### Documentation
+
+- Add readme field to Cargo.toml package metadata ([#100](https://github.com/joshrotenberg/cratesio-mcp/pull/100))
+- Add doc comments to CratesQueryBuilder methods and Sort variants ([#102](https://github.com/joshrotenberg/cratesio-mcp/pull/102))
+- Add example to format_number doc comment ([#107](https://github.com/joshrotenberg/cratesio-mcp/pull/107))
+- Sync README tool/prompt counts with registrations (closes #76) ([#110](https://github.com/joshrotenberg/cratesio-mcp/pull/110))
+
+### Features
+
+- Log client IP of sampled HTTP requests on the HTTP transport ([#94](https://github.com/joshrotenberg/cratesio-mcp/pull/94))
+- Add get_crate_changelog tool ([#72](https://github.com/joshrotenberg/cratesio-mcp/pull/72))
+- Add .icon() to authors, user, and user_stats tools ([#101](https://github.com/joshrotenberg/cratesio-mcp/pull/101))
+- Normalize MCP tool/prompt surface (closes #74, #77, #83) ([#124](https://github.com/joshrotenberg/cratesio-mcp/pull/124))
+- Add get_release_timeline tool (closes #55) ([#125](https://github.com/joshrotenberg/cratesio-mcp/pull/125))
+- Auto-reinitialize unknown MCP sessions to stop GET / churn ([#130](https://github.com/joshrotenberg/cratesio-mcp/pull/130))
+
+### Miscellaneous Tasks
+
+- Update rustls-webpki to 0.103.13 to fix RUSTSEC advisories ([#96](https://github.com/joshrotenberg/cratesio-mcp/pull/96))
+- Gate HTTP request-origin logging behind --log-requests (default off) ([#98](https://github.com/joshrotenberg/cratesio-mcp/pull/98))
+- Add roba.toml worker dispatch config ([#109](https://github.com/joshrotenberg/cratesio-mcp/pull/109))
+- Untrack accidentally-committed worker artifacts; gitignore .worktrees and .claudes ([#113](https://github.com/joshrotenberg/cratesio-mcp/pull/113))
+- Raise worker max_turns 40->80 and budget cap 2->10 (test-bed dial-in) ([#114](https://github.com/joshrotenberg/cratesio-mcp/pull/114))
+- Enforce single-instance Fly deployment (closes #93) ([#126](https://github.com/joshrotenberg/cratesio-mcp/pull/126))
+- Upgrade tower-mcp 0.9.1 -> 0.12.0 ([#127](https://github.com/joshrotenberg/cratesio-mcp/pull/127))
+- Deploy to Fly only on release tag, not every merge to main ([#129](https://github.com/joshrotenberg/cratesio-mcp/pull/129))
+
+### Testing
+
+- Extend docs/format.rs coverage for module listing and item detail ([#104](https://github.com/joshrotenberg/cratesio-mcp/pull/104))
+- Cover find_alternatives in integration router + 404 error path (closes #78) ([#111](https://github.com/joshrotenberg/cratesio-mcp/pull/111))
+- Cover composite-tool error and edge paths (closes #85) ([#116](https://github.com/joshrotenberg/cratesio-mcp/pull/116))
+- Inline tests for the four new prompts (closes #75) ([#117](https://github.com/joshrotenberg/cratesio-mcp/pull/117))
+- Cover 3 untested client endpoints (closes #86) ([#118](https://github.com/joshrotenberg/cratesio-mcp/pull/118))
+- Error/empty-path tests for 9 simple tools (part 1, refs #82) ([#119](https://github.com/joshrotenberg/cratesio-mcp/pull/119))
+- Error/empty-path tests for 9 simple tools (part 2, closes #82) ([#120](https://github.com/joshrotenberg/cratesio-mcp/pull/120))
+
+
+
 ## [0.1.4] - 2026-03-19
 
 ### Features
