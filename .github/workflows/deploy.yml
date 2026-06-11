@@ -1,16 +1,14 @@
 name: Deploy to Fly.io
 
 on:
+  # Deploy only when a release is cut: release-plz pushes a v{MAJOR}.{MINOR}.{PATCH}
+  # tag (git_tag_enable in release-plz.toml), which is the same signal cargo-dist's
+  # release.yml uses. This keeps the live server on the latest released version and
+  # avoids bouncing the machine (and wiping in-memory MCP sessions, see #93/#97) on
+  # every merge to main. Use the manual workflow_dispatch run for hotfix deploys.
   push:
-    branches:
-      - main
-    paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'Dockerfile'
-      - 'fly.toml'
-      - '.github/workflows/deploy.yml'
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
 
 jobs:
