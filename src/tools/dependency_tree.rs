@@ -674,6 +674,187 @@ mod tests {
         assert!(text.contains("dep-a"));
     }
 
+    #[tokio::test]
+    async fn dependency_tree_depth_limit() {
+        let server = MockServer::start().await;
+
+        // root → d1 → d2; d2 depends on d3 which must NOT be fetched when max_depth=2
+        Mock::given(method("GET"))
+            .and(path("/crates/root"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "crate": {
+                    "name": "root",
+                    "max_version": "1.0.0",
+                    "description": "Root",
+                    "downloads": 100,
+                    "created_at": "2026-01-01T00:00:00.000000Z",
+                    "updated_at": "2026-01-01T00:00:00.000000Z"
+                },
+                "versions": [{"num": "1.0.0", "yanked": false, "created_at": "2026-01-01T00:00:00.000000Z", "downloads": 100}]
+            })))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/root/1.0.0/dependencies"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "dependencies": [
+                    {"crate_id": "d1", "req": "^1", "kind": "normal", "optional": false, "version_id": 1}
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/d1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "crate": {
+                    "name": "d1",
+                    "max_version": "1.0.0",
+                    "description": "D1",
+                    "downloads": 50,
+                    "created_at": "2026-01-01T00:00:00.000000Z",
+                    "updated_at": "2026-01-01T00:00:00.000000Z"
+                },
+                "versions": [{"num": "1.0.0", "yanked": false, "created_at": "2026-01-01T00:00:00.000000Z", "downloads": 50}]
+            })))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/d1/1.0.0/dependencies"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "dependencies": [
+                    {"crate_id": "d2", "req": "^1", "kind": "normal", "optional": false, "version_id": 2}
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/d2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "crate": {
+                    "name": "d2",
+                    "max_version": "1.0.0",
+                    "description": "D2",
+                    "downloads": 30,
+                    "created_at": "2026-01-01T00:00:00.000000Z",
+                    "updated_at": "2026-01-01T00:00:00.000000Z"
+                },
+                "versions": [{"num": "1.0.0", "yanked": false, "created_at": "2026-01-01T00:00:00.000000Z", "downloads": 30}]
+            })))
+            .mount(&server)
+            .await;
+
+        // d2 declares d3 as a dep; BFS will store this in cache for d2 but must not
+        // then fetch d3 (d2 is popped at depth 2 >= max_depth)
+        Mock::given(method("GET"))
+            .and(path("/crates/d2/1.0.0/dependencies"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "dependencies": [
+                    {"crate_id": "d3", "req": "^1", "kind": "normal", "optional": false, "version_id": 3}
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        // d3 is intentionally NOT mocked -- the BFS must not request it
+        let state = test_state(&server.uri());
+        let tool = super::build(state);
+        let result = tool
+            .call(serde_json::json!({"name": "root", "max_depth": 2}))
+            .await;
+
+        let text = result.all_text();
+        assert!(!result.is_error);
+        assert!(text.contains("d1"), "d1 should appear in tree");
+        assert!(text.contains("d2"), "d2 should appear in tree");
+        // d3 appears as an unexpanded leaf (not in cache) -- its subtree is not walked
+        assert!(text.contains("d3"), "d3 should appear as a leaf entry");
+    }
+
+    #[tokio::test]
+    async fn dependency_tree_not_found_transitive_dep() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/my-crate"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "crate": {
+                    "name": "my-crate",
+                    "max_version": "1.0.0",
+                    "description": "Test",
+                    "downloads": 100,
+                    "created_at": "2026-01-01T00:00:00.000000Z",
+                    "updated_at": "2026-01-01T00:00:00.000000Z"
+                },
+                "versions": [{"num": "1.0.0", "yanked": false, "created_at": "2026-01-01T00:00:00.000000Z", "downloads": 100}]
+            })))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/my-crate/1.0.0/dependencies"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "dependencies": [
+                    {"crate_id": "dep-ok", "req": "^1", "kind": "normal", "optional": false, "version_id": 1},
+                    {"crate_id": "dep-missing", "req": "^2", "kind": "normal", "optional": false, "version_id": 2}
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/dep-ok"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "crate": {
+                    "name": "dep-ok",
+                    "max_version": "1.0.0",
+                    "description": "OK dep",
+                    "downloads": 50,
+                    "created_at": "2026-01-01T00:00:00.000000Z",
+                    "updated_at": "2026-01-01T00:00:00.000000Z"
+                },
+                "versions": [{"num": "1.0.0", "yanked": false, "created_at": "2026-01-01T00:00:00.000000Z", "downloads": 50}]
+            })))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/dep-ok/1.0.0/dependencies"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "dependencies": []
+            })))
+            .mount(&server)
+            .await;
+
+        // dep-missing returns 404 -- BFS skips it (Err(_) => continue) so it
+        // ends up absent from cache and rendered as a leaf by build_node
+        Mock::given(method("GET"))
+            .and(path("/crates/dep-missing"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+
+        let state = test_state(&server.uri());
+        let tool = super::build(state);
+        let result = tool.call(serde_json::json!({"name": "my-crate"})).await;
+
+        let text = result.all_text();
+        assert!(!result.is_error);
+        assert!(
+            text.contains("dep-ok"),
+            "resolved dep should appear in tree"
+        );
+        // dep-missing was skipped in BFS but still declared in root's dep list;
+        // build_node renders it as a leaf (not-in-cache path)
+        assert!(
+            text.contains("dep-missing"),
+            "not-found transitive dep should appear as a leaf in tree"
+        );
+    }
+
     #[test]
     fn input_deserializes_without_version_key() {
         let input: super::DependencyTreeInput =

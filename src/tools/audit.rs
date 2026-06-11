@@ -194,6 +194,256 @@ pub fn build(state: Arc<AppState>) -> Tool {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use tokio::sync::RwLock;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use crate::client::CratesIoClient;
+    use crate::client::docsrs::DocsRsClient;
+    use crate::client::osv::OsvClient;
+    use crate::docs::cache::DocsCache;
+    use crate::state::AppState;
+
+    fn test_state(crates_url: &str, osv_url: &str) -> Arc<AppState> {
+        Arc::new(AppState {
+            client: CratesIoClient::with_base_url(
+                "test",
+                Duration::from_millis(0),
+                Duration::from_secs(30),
+                crates_url,
+            )
+            .unwrap(),
+            docsrs_client: DocsRsClient::with_base_url("test", Duration::from_secs(30), crates_url)
+                .unwrap(),
+            osv_client: OsvClient::with_base_url("test", Duration::from_secs(30), osv_url).unwrap(),
+            docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
+            recent_searches: RwLock::new(Vec::new()),
+        })
+    }
+
+    #[tokio::test]
+    async fn audit_vulnerability_found() {
+        let crates_server = MockServer::start().await;
+        let osv_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/vuln-crate"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "crate": {
+                    "name": "vuln-crate",
+                    "max_version": "0.1.0",
+                    "description": "Vulnerable crate",
+                    "downloads": 100,
+                    "created_at": "2026-01-01T00:00:00.000000Z",
+                    "updated_at": "2026-01-01T00:00:00.000000Z"
+                },
+                "versions": [{"num": "0.1.0", "yanked": false, "created_at": "2026-01-01T00:00:00.000000Z", "downloads": 100}]
+            })))
+            .mount(&crates_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/vuln-crate/0.1.0/dependencies"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "dependencies": []
+            })))
+            .mount(&crates_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/query"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "vulns": [
+                    {
+                        "id": "RUSTSEC-2024-0001",
+                        "summary": "Use-after-free in vuln-crate",
+                        "references": [{"type": "ADVISORY", "url": "https://rustsec.org/advisories/RUSTSEC-2024-0001.html"}]
+                    }
+                ]
+            })))
+            .mount(&osv_server)
+            .await;
+
+        let state = test_state(&crates_server.uri(), &osv_server.uri());
+        let tool = super::build(state);
+        let result = tool.call(serde_json::json!({"name": "vuln-crate"})).await;
+
+        let text = result.all_text();
+        assert!(!result.is_error);
+        assert!(
+            text.contains("RUSTSEC-2024-0001"),
+            "advisory ID should appear in output, got: {text}"
+        );
+        assert!(text.contains("Vulnerabilities Found"));
+    }
+
+    #[tokio::test]
+    async fn audit_include_dev_deps() {
+        let crates_server = MockServer::start().await;
+        let osv_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/my-crate"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "crate": {
+                    "name": "my-crate",
+                    "max_version": "1.0.0",
+                    "description": "Test crate",
+                    "downloads": 100,
+                    "created_at": "2026-01-01T00:00:00.000000Z",
+                    "updated_at": "2026-01-01T00:00:00.000000Z"
+                },
+                "versions": [{"num": "1.0.0", "yanked": false, "created_at": "2026-01-01T00:00:00.000000Z", "downloads": 100}]
+            })))
+            .mount(&crates_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/my-crate/1.0.0/dependencies"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "dependencies": [
+                    {"crate_id": "normal-dep", "req": "^1", "kind": "normal", "optional": false, "version_id": 1},
+                    {"crate_id": "dev-dep", "req": "^1", "kind": "dev", "optional": false, "version_id": 2}
+                ]
+            })))
+            .mount(&crates_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/query"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "vulns": []
+            })))
+            .mount(&osv_server)
+            .await;
+
+        let state = test_state(&crates_server.uri(), &osv_server.uri());
+
+        // Default (include_dev=false): only normal dep counted
+        let tool = super::build(Arc::clone(&state));
+        let result = tool
+            .call(serde_json::json!({"name": "my-crate", "include_dev": false}))
+            .await;
+        assert!(
+            result.all_text().contains("Dependencies checked**: 1"),
+            "without include_dev only normal dep should be counted"
+        );
+
+        // include_dev=true: normal + dev dep both counted
+        let tool2 = super::build(state);
+        let result2 = tool2
+            .call(serde_json::json!({"name": "my-crate", "include_dev": true}))
+            .await;
+        assert!(
+            result2.all_text().contains("Dependencies checked**: 2"),
+            "with include_dev both deps should be counted"
+        );
+    }
+
+    #[tokio::test]
+    async fn audit_explicit_version_override() {
+        let crates_server = MockServer::start().await;
+        let osv_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/my-crate"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "crate": {
+                    "name": "my-crate",
+                    "max_version": "2.0.0",
+                    "description": "Test crate",
+                    "downloads": 100,
+                    "created_at": "2026-01-01T00:00:00.000000Z",
+                    "updated_at": "2026-01-01T00:00:00.000000Z"
+                },
+                "versions": [
+                    {"num": "2.0.0", "yanked": false, "created_at": "2026-06-01T00:00:00.000000Z", "downloads": 50},
+                    {"num": "1.0.0", "yanked": false, "created_at": "2026-01-01T00:00:00.000000Z", "downloads": 50}
+                ]
+            })))
+            .mount(&crates_server)
+            .await;
+
+        // Only the 1.0.0 endpoint is mocked -- if the tool incorrectly used 2.0.0 it would 404
+        Mock::given(method("GET"))
+            .and(path("/crates/my-crate/1.0.0/dependencies"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "dependencies": []
+            })))
+            .mount(&crates_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/query"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "vulns": []
+            })))
+            .mount(&osv_server)
+            .await;
+
+        let state = test_state(&crates_server.uri(), &osv_server.uri());
+        let tool = super::build(state);
+        let result = tool
+            .call(serde_json::json!({"name": "my-crate", "version": "1.0.0"}))
+            .await;
+
+        let text = result.all_text();
+        assert!(!result.is_error);
+        assert!(
+            text.contains("my-crate v1.0.0"),
+            "audit header should use the overridden version 1.0.0, got: {text}"
+        );
+    }
+
+    #[tokio::test]
+    async fn audit_osv_error_surfaced() {
+        let crates_server = MockServer::start().await;
+        let osv_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/my-crate"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "crate": {
+                    "name": "my-crate",
+                    "max_version": "1.0.0",
+                    "description": "Test crate",
+                    "downloads": 100,
+                    "created_at": "2026-01-01T00:00:00.000000Z",
+                    "updated_at": "2026-01-01T00:00:00.000000Z"
+                },
+                "versions": [{"num": "1.0.0", "yanked": false, "created_at": "2026-01-01T00:00:00.000000Z", "downloads": 100}]
+            })))
+            .mount(&crates_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/my-crate/1.0.0/dependencies"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "dependencies": []
+            })))
+            .mount(&crates_server)
+            .await;
+
+        // OSV returns a server error -- should surface as a tool error
+        Mock::given(method("POST"))
+            .and(path("/query"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&osv_server)
+            .await;
+
+        let state = test_state(&crates_server.uri(), &osv_server.uri());
+        let tool = super::build(state);
+        let result = tool.call(serde_json::json!({"name": "my-crate"})).await;
+
+        assert!(
+            result.is_error,
+            "OSV API error should surface as a tool error"
+        );
+    }
+
     #[test]
     fn input_deserializes_without_version_key() {
         let input: super::AuditInput =

@@ -158,3 +158,137 @@ pub fn build(state: Arc<AppState>) -> Tool {
         )
         .build()
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use tokio::sync::RwLock;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use crate::client::CratesIoClient;
+    use crate::client::docsrs::DocsRsClient;
+    use crate::client::osv::OsvClient;
+    use crate::docs::cache::DocsCache;
+    use crate::state::AppState;
+
+    fn test_state(base_url: &str) -> Arc<AppState> {
+        Arc::new(AppState {
+            client: CratesIoClient::with_base_url(
+                "test",
+                Duration::from_millis(0),
+                Duration::from_secs(30),
+                base_url,
+            )
+            .unwrap(),
+            docsrs_client: DocsRsClient::with_base_url("test", Duration::from_secs(30), base_url)
+                .unwrap(),
+            osv_client: OsvClient::with_base_url(
+                "test",
+                Duration::from_secs(30),
+                "http://localhost:1",
+            )
+            .unwrap(),
+            docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
+            recent_searches: RwLock::new(Vec::new()),
+        })
+    }
+
+    #[tokio::test]
+    async fn compare_partial_failure() {
+        let server = MockServer::start().await;
+
+        // good-crate succeeds
+        Mock::given(method("GET"))
+            .and(path("/crates/good-crate"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "crate": {
+                    "name": "good-crate",
+                    "max_version": "1.0.0",
+                    "description": "A good crate",
+                    "downloads": 10000,
+                    "created_at": "2026-01-01T00:00:00.000000Z",
+                    "updated_at": "2026-01-01T00:00:00.000000Z"
+                },
+                "versions": [{"num": "1.0.0", "yanked": false, "created_at": "2026-01-01T00:00:00.000000Z", "downloads": 10000}]
+            })))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/good-crate/1.0.0/dependencies"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "dependencies": []
+            })))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/good-crate/1.0.0"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "version": {
+                    "num": "1.0.0",
+                    "yanked": false,
+                    "created_at": "2026-01-01T00:00:00.000000Z",
+                    "downloads": 10000,
+                    "license": "MIT"
+                }
+            })))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/good-crate/reverse_dependencies"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "dependencies": [],
+                "versions": [],
+                "meta": {"total": 5}
+            })))
+            .mount(&server)
+            .await;
+
+        // bad-crate returns 404 -- triggers the Err(e) row-formatting path
+        Mock::given(method("GET"))
+            .and(path("/crates/bad-crate"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/bad-crate/reverse_dependencies"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+
+        let state = test_state(&server.uri());
+        let tool = super::build(state);
+        let result = tool
+            .call(serde_json::json!({"crates": "good-crate, bad-crate"}))
+            .await;
+
+        let text = result.all_text();
+        assert!(!result.is_error);
+        assert!(
+            text.contains("error:"),
+            "bad-crate cells should contain 'error:' from Err(e) formatting path, got: {text}"
+        );
+        assert!(text.contains("good-crate"));
+    }
+
+    #[tokio::test]
+    async fn compare_too_many_crates() {
+        let server = MockServer::start().await;
+        let state = test_state(&server.uri());
+        let tool = super::build(state);
+
+        let result = tool
+            .call(serde_json::json!({"crates": "a, b, c, d, e, f"}))
+            .await;
+
+        let text = result.all_text();
+        assert!(!result.is_error);
+        assert!(text.contains("at most 5"));
+    }
+}
