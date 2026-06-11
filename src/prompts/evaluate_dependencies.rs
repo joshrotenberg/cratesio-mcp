@@ -50,3 +50,40 @@ pub fn build() -> Prompt {
         })
         .build()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn required_args_appear_in_text() {
+        let prompt = build();
+        let mut args = HashMap::new();
+        args.insert("crates".to_string(), "serde, anyhow".to_string());
+        let result = prompt.get(args).await.unwrap();
+        let text = result.first_message_text().expect("expected message text");
+        assert!(text.contains("serde"));
+        assert!(text.contains("anyhow"));
+    }
+
+    #[tokio::test]
+    async fn optional_use_case_appears_in_text() {
+        let prompt = build();
+        let mut args = HashMap::new();
+        args.insert("crates".to_string(), "reqwest".to_string());
+        args.insert("use_case".to_string(), "production web service".to_string());
+        let result = prompt.get(args).await.unwrap();
+        let text = result.first_message_text().expect("expected message text");
+        assert!(text.contains("reqwest"));
+        assert!(text.contains("production web service"));
+    }
+
+    #[tokio::test]
+    async fn description_is_set() {
+        let prompt = build();
+        let mut args = HashMap::new();
+        args.insert("crates".to_string(), "serde".to_string());
+        let result = prompt.get(args).await.unwrap();
+        assert!(result.description.is_some());
+    }
+}

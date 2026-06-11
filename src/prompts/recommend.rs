@@ -61,3 +61,41 @@ pub fn build() -> Prompt {
         })
         .build()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn required_args_appear_in_text() {
+        let prompt = build();
+        let mut args = HashMap::new();
+        args.insert("use_case".to_string(), "CLI argument parsing".to_string());
+        let result = prompt.get(args).await.unwrap();
+        let text = result.first_message_text().expect("expected message text");
+        assert!(text.contains("CLI argument parsing"));
+        assert!(text.contains('5'));
+    }
+
+    #[tokio::test]
+    async fn optional_max_results_appears_in_text() {
+        let prompt = build();
+        let mut args = HashMap::new();
+        args.insert("use_case".to_string(), "REST API".to_string());
+        args.insert("max_results".to_string(), "10".to_string());
+        let result = prompt.get(args).await.unwrap();
+        let text = result.first_message_text().expect("expected message text");
+        assert!(text.contains("REST API"));
+        assert!(text.contains("10"));
+    }
+
+    #[tokio::test]
+    async fn description_is_set() {
+        let prompt = build();
+        let mut args = HashMap::new();
+        args.insert("use_case".to_string(), "async HTTP client".to_string());
+        let result = prompt.get(args).await.unwrap();
+        assert!(result.description.is_some());
+        assert!(result.description.unwrap().contains("async HTTP client"));
+    }
+}

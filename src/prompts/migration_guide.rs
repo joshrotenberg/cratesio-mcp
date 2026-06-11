@@ -61,3 +61,34 @@ pub fn build() -> Prompt {
         })
         .build()
 }
+
+// migration_guide has no optional arguments; tests 1 and 3 only.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn required_args_appear_in_text() {
+        let prompt = build();
+        let mut args = HashMap::new();
+        args.insert("from_crate".to_string(), "hyper".to_string());
+        args.insert("to_crate".to_string(), "reqwest".to_string());
+        let result = prompt.get(args).await.unwrap();
+        let text = result.first_message_text().expect("expected message text");
+        assert!(text.contains("hyper"));
+        assert!(text.contains("reqwest"));
+    }
+
+    #[tokio::test]
+    async fn description_is_set() {
+        let prompt = build();
+        let mut args = HashMap::new();
+        args.insert("from_crate".to_string(), "hyper".to_string());
+        args.insert("to_crate".to_string(), "reqwest".to_string());
+        let result = prompt.get(args).await.unwrap();
+        assert!(result.description.is_some());
+        let desc = result.description.unwrap();
+        assert!(desc.contains("hyper"));
+        assert!(desc.contains("reqwest"));
+    }
+}
