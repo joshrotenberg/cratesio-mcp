@@ -49,6 +49,8 @@ struct ResolvedCrate {
     deps: Vec<Dependency>,
 }
 
+const MAX_UNIQUE_CRATES: usize = 50;
+
 /// Format the tree output recursively.
 fn format_tree(
     nodes: &[TreeNode],
@@ -158,7 +160,9 @@ pub fn build(state: Arc<AppState>) -> Tool {
                 let mut queued: HashSet<String> = HashSet::new();
                 queued.insert(input.name.clone());
 
-                while let Some((crate_name, depth)) = queue.pop_front() {
+                let mut truncated = false;
+
+                'bfs: while let Some((crate_name, depth)) = queue.pop_front() {
                     if depth >= max_depth {
                         continue;
                     }
@@ -178,6 +182,11 @@ pub fn build(state: Arc<AppState>) -> Tool {
                             continue;
                         }
                         queued.insert(dep.crate_id.clone());
+
+                        if queued.len() > MAX_UNIQUE_CRATES {
+                            truncated = true;
+                            break 'bfs;
+                        }
 
                         // Resolve the dep's actual version via get_crate
                         let dep_crate = match state.client.get_crate(&dep.crate_id).await {
@@ -377,6 +386,13 @@ pub fn build(state: Arc<AppState>) -> Tool {
                      - **API calls made**: {}\n",
                     direct_deps, unique_crates, tree_depth, api_calls
                 ));
+
+                if truncated {
+                    output.push_str(&format!(
+                        "\n> Note: tree truncated at {} unique crates (graph is larger).\n",
+                        MAX_UNIQUE_CRATES
+                    ));
+                }
 
                 Ok(CallToolResult::text(output))
             },
@@ -860,5 +876,96 @@ mod tests {
         let input: super::DependencyTreeInput =
             serde_json::from_value(serde_json::json!({"name": "serde"})).unwrap();
         assert!(input.version.is_none());
+    }
+
+    #[tokio::test]
+    async fn dependency_tree_truncated_at_cap() {
+        use wiremock::matchers::path_regex;
+
+        let server = MockServer::start().await;
+
+        // Root has 51 direct deps (dep-0 through dep-50), which exceeds MAX_UNIQUE_CRATES=50
+        let deps: Vec<serde_json::Value> = (0..=50)
+            .map(|i| {
+                serde_json::json!({
+                    "crate_id": format!("dep-{}", i),
+                    "req": "^1.0",
+                    "kind": "normal",
+                    "optional": false,
+                    "version_id": i + 1
+                })
+            })
+            .collect();
+
+        Mock::given(method("GET"))
+            .and(path("/crates/root"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "crate": {
+                    "name": "root",
+                    "max_version": "1.0.0",
+                    "description": "Root",
+                    "downloads": 100,
+                    "created_at": "2026-01-01T00:00:00.000000Z",
+                    "updated_at": "2026-01-01T00:00:00.000000Z"
+                },
+                "versions": [{"num": "1.0.0", "yanked": false, "created_at": "2026-01-01T00:00:00.000000Z", "downloads": 100}]
+            })))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/crates/root/1.0.0/dependencies"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "dependencies": deps
+            })))
+            .mount(&server)
+            .await;
+
+        // Catch-all for any dep-N crate info
+        Mock::given(method("GET"))
+            .and(path_regex(r"^/crates/dep-\d+$"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "crate": {
+                    "name": "dep-generic",
+                    "max_version": "1.0.0",
+                    "description": "A dep",
+                    "downloads": 10,
+                    "created_at": "2026-01-01T00:00:00.000000Z",
+                    "updated_at": "2026-01-01T00:00:00.000000Z"
+                },
+                "versions": [{"num": "1.0.0", "yanked": false, "created_at": "2026-01-01T00:00:00.000000Z", "downloads": 10}]
+            })))
+            .mount(&server)
+            .await;
+
+        // Catch-all for any dep-N dependencies (no sub-deps)
+        Mock::given(method("GET"))
+            .and(path_regex(r"^/crates/dep-\d+/1\.0\.0/dependencies$"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "dependencies": []
+            })))
+            .mount(&server)
+            .await;
+
+        let state = test_state(&server.uri());
+        let tool = super::build(state);
+        let result = tool.call(serde_json::json!({"name": "root"})).await;
+
+        let text = result.all_text();
+        assert!(!result.is_error);
+        // Truncation note must appear
+        assert!(
+            text.contains("Note: tree truncated at 50 unique crates"),
+            "expected truncation note in output:\n{}",
+            text
+        );
+        // API calls are bounded: the BFS breaks before dep-49's API calls,
+        // so at most root(2) + 49 deps * 2 = 100 calls, not 2 + 51*2 = 104.
+        let request_count = server.received_requests().await.unwrap().len();
+        assert!(
+            request_count <= 100,
+            "expected <= 100 API calls, got {}",
+            request_count
+        );
     }
 }
