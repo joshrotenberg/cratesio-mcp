@@ -1,2 +1,6 @@
 /target
 CLAUDE.md
+
+# Agent/worker scratch artifacts -- never commit (Lesson 0)
+.worktrees/
+.claudes/
