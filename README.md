@@ -90,7 +90,7 @@ Add to `claude_desktop_config.json`:
 
 ## What's included
 
-### Tools (28)
+### Tools (29)
 
 | Tool | Description |
 |------|-------------|
@@ -122,6 +122,7 @@ Add to `claude_desktop_config.json`:
 | `get_crate_health` | Comprehensive health report (maturity, adoption, maintenance, security, dependency weight) |
 | `get_alternatives` | Find and compare alternative crates based on keywords, downloads, and recent activity |
 | `get_crate_changelog` | Changelog content from a crate's GitHub repository, optionally filtered to a version |
+| `get_release_timeline` | Version-over-version registry-metadata diff: feature changes, MSRV bumps, yanked status, release cadence |
 
 ### Resources (4)
 

@@ -45,6 +45,7 @@ fn test_router(state: Arc<AppState>) -> McpRouter {
         .tool(tools::health_check::build(state.clone()))
         .tool(tools::changelog::build(state.clone()))
         .tool(tools::alternatives::build(state.clone()))
+        .tool(tools::release_timeline::build(state.clone()))
         .resource(resources::recent_searches::build(state.clone()))
         .resource_template(resources::crate_info::build(state.clone()))
         .resource_template(resources::readme::build(state.clone()))
@@ -265,7 +266,7 @@ async fn list_tools_returns_all_24() {
 
     let tools = client.list_tools().await;
 
-    assert_eq!(tools.len(), 24);
+    assert_eq!(tools.len(), 25);
     let names: Vec<&str> = tools
         .iter()
         .filter_map(|t| t.get("name").and_then(|n| n.as_str()))
@@ -294,6 +295,7 @@ async fn list_tools_returns_all_24() {
     assert!(names.contains(&"get_crate_health"));
     assert!(names.contains(&"get_crate_changelog"));
     assert!(names.contains(&"get_alternatives"));
+    assert!(names.contains(&"get_release_timeline"));
 }
 
 #[tokio::test]

@@ -21,6 +21,7 @@ pub mod keyword_detail;
 pub mod keywords;
 pub mod owners;
 pub mod readme;
+pub mod release_timeline;
 pub mod reverse_deps;
 pub mod search;
 pub mod search_docs;
