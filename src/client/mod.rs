@@ -77,18 +77,22 @@ pub struct CratesIoClient {
 }
 
 impl CratesIoClient {
-    /// Create a new client with the given user agent and rate limit.
-    pub fn new(user_agent: &str, rate_limit: Duration) -> Result<Self, Error> {
-        Self::with_base_url(user_agent, rate_limit, "https://crates.io/api/v1")
+    /// Create a new client with the given user agent, rate limit, and outbound timeout.
+    pub fn new(user_agent: &str, rate_limit: Duration, timeout: Duration) -> Result<Self, Error> {
+        Self::with_base_url(user_agent, rate_limit, timeout, "https://crates.io/api/v1")
     }
 
     /// Create a new client with a custom base URL (for testing).
     pub fn with_base_url(
         user_agent: &str,
         rate_limit: Duration,
+        timeout: Duration,
         base_url: &str,
     ) -> Result<Self, Error> {
-        let http = reqwest::Client::builder().user_agent(user_agent).build()?;
+        let http = reqwest::Client::builder()
+            .user_agent(user_agent)
+            .timeout(timeout)
+            .build()?;
         Ok(Self {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),

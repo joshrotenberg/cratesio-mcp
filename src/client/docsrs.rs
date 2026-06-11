@@ -3,6 +3,7 @@
 use flate2::read::GzDecoder;
 use rustdoc_types::Crate;
 use std::io::Read;
+use std::time::Duration;
 
 /// Errors from the docs.rs client.
 #[derive(Debug, thiserror::Error)]
@@ -110,14 +111,21 @@ pub struct DocsRsClient {
 }
 
 impl DocsRsClient {
-    /// Create a new client with the given user agent.
-    pub fn new(user_agent: &str) -> Result<Self, DocsRsError> {
-        Self::with_base_url(user_agent, "https://docs.rs")
+    /// Create a new client with the given user agent and outbound timeout.
+    pub fn new(user_agent: &str, timeout: Duration) -> Result<Self, DocsRsError> {
+        Self::with_base_url(user_agent, timeout, "https://docs.rs")
     }
 
     /// Create a new client with a custom base URL (for testing).
-    pub fn with_base_url(user_agent: &str, base_url: &str) -> Result<Self, DocsRsError> {
-        let http = reqwest::Client::builder().user_agent(user_agent).build()?;
+    pub fn with_base_url(
+        user_agent: &str,
+        timeout: Duration,
+        base_url: &str,
+    ) -> Result<Self, DocsRsError> {
+        let http = reqwest::Client::builder()
+            .user_agent(user_agent)
+            .timeout(timeout)
+            .build()?;
         Ok(Self {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
@@ -270,7 +278,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = DocsRsClient::with_base_url("test", &server.uri()).unwrap();
+        let client = DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
         let krate = client.fetch_rustdoc("serde", "latest").await.unwrap();
         assert_eq!(krate.crate_version.as_deref(), Some("1.0.0"));
     }
@@ -288,7 +296,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = DocsRsClient::with_base_url("test", &server.uri()).unwrap();
+        let client = DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
         let krate = client.fetch_rustdoc("serde", "latest").await.unwrap();
         assert_eq!(krate.crate_version.as_deref(), Some("1.0.0"));
     }
@@ -350,7 +358,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = DocsRsClient::with_base_url("test", &server.uri()).unwrap();
+        let client = DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
         let err = client
             .fetch_rustdoc("nonexistent", "latest")
             .await
@@ -367,7 +375,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = DocsRsClient::with_base_url("test", &server.uri()).unwrap();
+        let client = DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
         let err = client.fetch_rustdoc("oldcrate", "0.1.0").await.unwrap_err();
         assert!(matches!(err, DocsRsError::DocsNotAvailable { .. }));
     }
@@ -385,7 +393,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = DocsRsClient::with_base_url("test", &server.uri()).unwrap();
+        let client = DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
         let err = client.fetch_rustdoc("bad", "latest").await.unwrap_err();
         assert!(matches!(err, DocsRsError::Parse { .. }));
     }
@@ -406,7 +414,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = DocsRsClient::with_base_url("test", &server.uri()).unwrap();
+        let client = DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
         // Should succeed despite version mismatch (structure is compatible)
         let krate = client.fetch_rustdoc("testcrate", "latest").await.unwrap();
         assert_eq!(krate.crate_version.as_deref(), Some("1.0.0"));
@@ -433,7 +441,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = DocsRsClient::with_base_url("test", &server.uri()).unwrap();
+        let client = DocsRsClient::with_base_url("test", Duration::from_secs(30), &server.uri()).unwrap();
         let err = client
             .fetch_rustdoc("badcrate", "latest")
             .await

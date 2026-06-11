@@ -10,17 +10,27 @@ use super::types::{
 
 /// Create a client pointed at the mock server with no rate limiting and retries disabled.
 fn test_client(base_url: &str) -> CratesIoClient {
-    CratesIoClient::with_base_url("test-agent", Duration::from_millis(0), base_url)
-        .unwrap()
-        .with_max_retries(0)
+    CratesIoClient::with_base_url(
+        "test-agent",
+        Duration::from_millis(0),
+        Duration::from_secs(30),
+        base_url,
+    )
+    .unwrap()
+    .with_max_retries(0)
 }
 
 /// Create a client with retries enabled and zero backoff (for fast tests).
 fn test_retry_client(base_url: &str) -> CratesIoClient {
-    CratesIoClient::with_base_url("test-agent", Duration::from_millis(0), base_url)
-        .unwrap()
-        .with_max_retries(3)
-        .with_initial_backoff(Duration::from_millis(0))
+    CratesIoClient::with_base_url(
+        "test-agent",
+        Duration::from_millis(0),
+        Duration::from_secs(30),
+        base_url,
+    )
+    .unwrap()
+    .with_max_retries(3)
+    .with_initial_backoff(Duration::from_millis(0))
 }
 
 // ── get_crate ───────────────────────────────────────────────────────────────

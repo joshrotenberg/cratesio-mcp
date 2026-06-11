@@ -37,20 +37,22 @@ impl AppState {
     ///
     /// # Arguments
     /// * `rate_limit` - Minimum interval between crates.io API calls
+    /// * `http_timeout` - Per-request timeout for all outbound HTTP calls
     /// * `docs_cache_max_entries` - Maximum cached rustdoc JSON entries
     /// * `docs_cache_ttl` - TTL for cached rustdoc JSON entries
     pub fn new(
         rate_limit: Duration,
+        http_timeout: Duration,
         docs_cache_max_entries: usize,
         docs_cache_ttl: Duration,
     ) -> Result<Self, tower_mcp::BoxError> {
         let user_agent = "cratesio-mcp (https://github.com/joshrotenberg/cratesio-mcp)";
-        let client = CratesIoClient::new(user_agent, rate_limit)
+        let client = CratesIoClient::new(user_agent, rate_limit, http_timeout)
             .map_err(|e| format!("Failed to create crates.io client: {e}"))?;
-        let docsrs_client = DocsRsClient::new(user_agent)
+        let docsrs_client = DocsRsClient::new(user_agent, http_timeout)
             .map_err(|e| format!("Failed to create docs.rs client: {e}"))?;
-        let osv_client =
-            OsvClient::new(user_agent).map_err(|e| format!("Failed to create OSV client: {e}"))?;
+        let osv_client = OsvClient::new(user_agent, http_timeout)
+            .map_err(|e| format!("Failed to create OSV client: {e}"))?;
         let docs_cache = DocsCache::new(docs_cache_max_entries, docs_cache_ttl);
 
         Ok(Self {
@@ -78,13 +80,15 @@ impl AppState {
         github_raw_url: &str,
     ) -> Result<Self, tower_mcp::BoxError> {
         let user_agent = "cratesio-mcp-test";
-        let client = CratesIoClient::with_base_url(user_agent, Duration::from_millis(0), base_url)
-            .map_err(|e| format!("Failed to create crates.io client: {e}"))?
-            .with_github_raw_url(github_raw_url);
-        let docsrs_client = DocsRsClient::new(user_agent)
+        let timeout = Duration::from_secs(30);
+        let client =
+            CratesIoClient::with_base_url(user_agent, Duration::from_millis(0), timeout, base_url)
+                .map_err(|e| format!("Failed to create crates.io client: {e}"))?
+                .with_github_raw_url(github_raw_url);
+        let docsrs_client = DocsRsClient::new(user_agent, timeout)
             .map_err(|e| format!("Failed to create docs.rs client: {e}"))?;
-        let osv_client =
-            OsvClient::new(user_agent).map_err(|e| format!("Failed to create OSV client: {e}"))?;
+        let osv_client = OsvClient::new(user_agent, timeout)
+            .map_err(|e| format!("Failed to create OSV client: {e}"))?;
         let docs_cache = DocsCache::new(10, Duration::from_secs(60));
 
         Ok(Self {
@@ -105,12 +109,17 @@ impl AppState {
         osv_url: &str,
     ) -> Result<Self, tower_mcp::BoxError> {
         let user_agent = "cratesio-mcp-test";
-        let client =
-            CratesIoClient::with_base_url(user_agent, Duration::from_millis(0), crates_url)
-                .map_err(|e| format!("Failed to create crates.io client: {e}"))?;
-        let docsrs_client = DocsRsClient::with_base_url(user_agent, docsrs_url)
+        let timeout = Duration::from_secs(30);
+        let client = CratesIoClient::with_base_url(
+            user_agent,
+            Duration::from_millis(0),
+            timeout,
+            crates_url,
+        )
+        .map_err(|e| format!("Failed to create crates.io client: {e}"))?;
+        let docsrs_client = DocsRsClient::with_base_url(user_agent, timeout, docsrs_url)
             .map_err(|e| format!("Failed to create docs.rs client: {e}"))?;
-        let osv_client = OsvClient::with_base_url(user_agent, osv_url)
+        let osv_client = OsvClient::with_base_url(user_agent, timeout, osv_url)
             .map_err(|e| format!("Failed to create OSV client: {e}"))?;
         let docs_cache = DocsCache::new(10, Duration::from_secs(60));
 

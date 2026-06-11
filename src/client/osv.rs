@@ -3,6 +3,8 @@
 //! Queries the [OSV.dev](https://osv.dev/) API to check Rust crates for known
 //! security vulnerabilities aggregated from RustSec, GHSA, and NVD.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 
 // ── Error ──────────────────────────────────────────────────────────────────
@@ -110,14 +112,21 @@ pub struct OsvClient {
 }
 
 impl OsvClient {
-    /// Create a new client with the given user agent.
-    pub fn new(user_agent: &str) -> Result<Self, OsvError> {
-        Self::with_base_url(user_agent, "https://api.osv.dev/v1")
+    /// Create a new client with the given user agent and outbound timeout.
+    pub fn new(user_agent: &str, timeout: Duration) -> Result<Self, OsvError> {
+        Self::with_base_url(user_agent, timeout, "https://api.osv.dev/v1")
     }
 
     /// Create a new client with a custom base URL (for testing).
-    pub fn with_base_url(user_agent: &str, base_url: &str) -> Result<Self, OsvError> {
-        let http = reqwest::Client::builder().user_agent(user_agent).build()?;
+    pub fn with_base_url(
+        user_agent: &str,
+        timeout: Duration,
+        base_url: &str,
+    ) -> Result<Self, OsvError> {
+        let http = reqwest::Client::builder()
+            .user_agent(user_agent)
+            .timeout(timeout)
+            .build()?;
         Ok(Self {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
@@ -177,7 +186,7 @@ mod tests {
     use super::*;
 
     fn test_client(base_url: &str) -> OsvClient {
-        OsvClient::with_base_url("test-agent", base_url).unwrap()
+        OsvClient::with_base_url("test-agent", Duration::from_secs(30), base_url).unwrap()
     }
 
     #[tokio::test]

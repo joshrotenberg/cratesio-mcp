@@ -48,9 +48,14 @@ struct Args {
     #[arg(short, long, default_value = "3000")]
     port: u16,
 
-    /// Request timeout in seconds (for HTTP transport)
+    /// Request timeout in seconds (for HTTP transport inbound requests)
     #[arg(long, default_value = "30")]
     request_timeout_secs: u64,
+
+    /// Per-request timeout in seconds for all outbound HTTP calls
+    /// (crates.io, docs.rs, OSV.dev). Applies on all transports including stdio.
+    #[arg(long, default_value = "30")]
+    http_timeout_secs: u64,
 
     /// Minimal mode - only register tools (no prompts, resources, or completions).
     /// Use this to work around Claude Code MCP tool discovery issues.
@@ -108,10 +113,16 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
 
     // Create shared state with rate limiting for crates.io API
     let rate_limit = Duration::from_millis(args.rate_limit_ms);
+    let http_timeout = Duration::from_secs(args.http_timeout_secs);
     let docs_cache_ttl = Duration::from_secs(args.docs_cache_ttl_secs);
     let state = Arc::new(
-        AppState::new(rate_limit, args.docs_cache_max_entries, docs_cache_ttl)
-            .map_err(|e| format!("Failed to create state: {}", e))?,
+        AppState::new(
+            rate_limit,
+            http_timeout,
+            args.docs_cache_max_entries,
+            docs_cache_ttl,
+        )
+        .map_err(|e| format!("Failed to create state: {}", e))?,
     );
 
     // Build all tools

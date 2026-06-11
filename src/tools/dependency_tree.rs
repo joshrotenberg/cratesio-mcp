@@ -401,10 +401,16 @@ mod tests {
 
     fn test_state(base_url: &str) -> Arc<AppState> {
         Arc::new(AppState {
-            client: CratesIoClient::with_base_url("test", Duration::from_millis(0), base_url)
+            client: CratesIoClient::with_base_url(
+                "test",
+                Duration::from_millis(0),
+                Duration::from_secs(30),
+                base_url,
+            )
+            .unwrap(),
+            docsrs_client: DocsRsClient::with_base_url("test", Duration::from_secs(30), base_url)
                 .unwrap(),
-            docsrs_client: DocsRsClient::with_base_url("test", base_url).unwrap(),
-            osv_client: OsvClient::new("test").unwrap(),
+            osv_client: OsvClient::new("test", Duration::from_secs(30)).unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
             recent_searches: RwLock::new(Vec::new()),
         })

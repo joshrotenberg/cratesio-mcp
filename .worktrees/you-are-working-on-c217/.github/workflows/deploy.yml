@@ -1,0 +1,110 @@
+name: Deploy to Fly.io
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'Dockerfile'
+      - 'fly.toml'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Fly.io
+    runs-on: ubuntu-latest
+    if: github.repository == 'joshrotenberg/cratesio-mcp'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Fly CLI
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to Fly.io
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Verify deployment (health check)
+        run: |
+          echo "Waiting for server to be ready..."
+          sleep 10
+
+          echo "Checking health endpoint..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://cratesio-mcp.fly.dev/health)
+
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "Health check passed!"
+          else
+            echo "Health check failed with status: $HTTP_STATUS"
+            exit 1
+          fi
+
+      - name: Verify deployment (MCP protocol)
+        run: |
+          MAX_RETRIES=3
+          RETRY_DELAY=5
+
+          for attempt in $(seq 1 $MAX_RETRIES); do
+            echo "=== Attempt $attempt of $MAX_RETRIES ==="
+
+            echo "Sending initialize request..."
+            INIT_RESPONSE=$(curl -s -D /tmp/headers.txt -X POST https://cratesio-mcp.fly.dev/ \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json" \
+              -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"deploy-check","version":"1.0"}}}')
+
+            echo "Init response: $INIT_RESPONSE"
+
+            SESSION_ID=$(grep -i "mcp-session-id" /tmp/headers.txt | cut -d' ' -f2 | tr -d '\r')
+
+            echo "Session ID: $SESSION_ID"
+
+            if [ -z "$SESSION_ID" ]; then
+              echo "Failed to get session ID"
+              if [ $attempt -lt $MAX_RETRIES ]; then
+                echo "Retrying in ${RETRY_DELAY}s..."
+                sleep $RETRY_DELAY
+                continue
+              fi
+              exit 1
+            fi
+
+            sleep 1
+
+            echo "Sending initialized notification..."
+            curl -s -X POST https://cratesio-mcp.fly.dev/ \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json" \
+              -H "MCP-Session-Id: $SESSION_ID" \
+              -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+
+            sleep 1
+
+            echo "Sending test tool call..."
+            TOOL_RESPONSE=$(curl -s -X POST https://cratesio-mcp.fly.dev/ \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json" \
+              -H "MCP-Session-Id: $SESSION_ID" \
+              -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"search_crates","arguments":{"query":"tower"}}}')
+
+            echo "Tool response: $TOOL_RESPONSE"
+
+            if echo "$TOOL_RESPONSE" | grep -q '"result"'; then
+              echo "MCP protocol verification successful!"
+              exit 0
+            else
+              echo "MCP protocol verification failed - unexpected response"
+              if [ $attempt -lt $MAX_RETRIES ]; then
+                echo "Retrying in ${RETRY_DELAY}s..."
+                sleep $RETRY_DELAY
+                continue
+              fi
+              exit 1
+            fi
+          done

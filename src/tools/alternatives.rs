@@ -212,10 +212,17 @@ mod tests {
     fn test_state(crates_url: &str) -> Arc<AppState> {
         let osv_url = "http://localhost:1";
         Arc::new(AppState {
-            client: CratesIoClient::with_base_url("test", Duration::from_millis(0), crates_url)
+            client: CratesIoClient::with_base_url(
+                "test",
+                Duration::from_millis(0),
+                Duration::from_secs(30),
+                crates_url,
+            )
+            .unwrap(),
+            docsrs_client: DocsRsClient::with_base_url("test", Duration::from_secs(30), crates_url)
                 .unwrap(),
-            docsrs_client: DocsRsClient::with_base_url("test", crates_url).unwrap(),
-            osv_client: OsvClient::with_base_url("test", osv_url).unwrap(),
+            osv_client: OsvClient::with_base_url("test", Duration::from_secs(30), osv_url)
+                .unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
             recent_searches: RwLock::new(Vec::new()),
         })

@@ -193,6 +193,7 @@ mod tests {
         let client = crate::client::CratesIoClient::with_base_url(
             "test",
             std::time::Duration::from_millis(0),
+            std::time::Duration::from_secs(30),
             &crates_server.uri(),
         )
         .unwrap()
@@ -218,6 +219,7 @@ mod tests {
         let client = crate::client::CratesIoClient::with_base_url(
             "test",
             std::time::Duration::from_millis(0),
+            std::time::Duration::from_secs(30),
             &crates_server.uri(),
         )
         .unwrap()
@@ -244,6 +246,7 @@ mod tests {
         let client = crate::client::CratesIoClient::with_base_url(
             "test",
             std::time::Duration::from_millis(0),
+            std::time::Duration::from_secs(30),
             &crates_server.uri(),
         )
         .unwrap()
@@ -288,6 +291,7 @@ mod tests {
         let client = crate::client::CratesIoClient::with_base_url(
             "test",
             std::time::Duration::from_millis(0),
+            std::time::Duration::from_secs(30),
             &crates_server.uri(),
         )
         .unwrap()

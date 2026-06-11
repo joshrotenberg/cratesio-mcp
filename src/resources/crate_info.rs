@@ -80,10 +80,15 @@ mod tests {
 
     fn test_state(crates_url: &str) -> Arc<AppState> {
         Arc::new(AppState {
-            client: CratesIoClient::with_base_url("test", Duration::from_millis(0), crates_url)
-                .unwrap(),
-            docsrs_client: DocsRsClient::new("test").unwrap(),
-            osv_client: OsvClient::new("test").unwrap(),
+            client: CratesIoClient::with_base_url(
+                "test",
+                Duration::from_millis(0),
+                Duration::from_secs(30),
+                crates_url,
+            )
+            .unwrap(),
+            docsrs_client: DocsRsClient::new("test", Duration::from_secs(30)).unwrap(),
+            osv_client: OsvClient::new("test", Duration::from_secs(30)).unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
             recent_searches: RwLock::new(Vec::new()),
         })
