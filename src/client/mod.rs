@@ -466,6 +466,23 @@ impl CratesIoClient {
         Ok(())
     }
 
+    /// DELETE that succeeds on 2xx, authenticated with an explicitly-supplied
+    /// token rather than the client's stored API token -- used for the
+    /// trusted-publishing token revoke, which is authed by the temporary token
+    /// itself.
+    pub(crate) async fn delete_ok_with_token(&self, path: &str, token: &str) -> Result<(), Error> {
+        self.throttle().await;
+        let url = format!("{}{}", self.base_url, path);
+        let resp = self
+            .http
+            .delete(&url)
+            .header("Authorization", token)
+            .send()
+            .await?;
+        Self::check_status(resp, path).await?;
+        Ok(())
+    }
+
     /// PATCH a JSON body and return deserialized response. Requires auth.
     pub(crate) async fn patch_json<T: DeserializeOwned, B: Serialize>(
         &self,

@@ -98,13 +98,14 @@ impl CratesIoClient {
         Ok(resp.token)
     }
 
-    /// Revoke the current temporary trusted-publishing access token.
+    /// Revoke a temporary trusted-publishing access token.
     ///
-    /// Per the crates.io API this revokes the temporary token previously
-    /// obtained from [`exchange_oidc_token`](Self::exchange_oidc_token); the
-    /// endpoint takes no id and is authenticated by that temporary token
-    /// itself (not a regular crates.io API token).
-    pub async fn revoke_trusted_token(&self) -> Result<(), Error> {
-        self.delete_ok("/trusted_publishing/tokens").await
+    /// Pass the temporary `token` previously returned from
+    /// [`exchange_oidc_token`](Self::exchange_oidc_token). Per the crates.io
+    /// API the endpoint takes no id and is authenticated by that temporary
+    /// token itself, not a regular crates.io API token.
+    pub async fn revoke_trusted_token(&self, token: &str) -> Result<(), Error> {
+        self.delete_ok_with_token("/trusted_publishing/tokens", token)
+            .await
     }
 }

@@ -1832,16 +1832,20 @@ async fn exchange_oidc_token_sends_post() {
 async fn revoke_trusted_token_sends_delete() {
     let server = MockServer::start().await;
 
+    // Authed by the temporary token itself, NOT the client's stored API token.
     Mock::given(method("DELETE"))
         .and(path("/trusted_publishing/tokens"))
-        .and(header("Authorization", "test-token"))
+        .and(header("Authorization", "temp-trustpub-token"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
         .expect(1)
         .mount(&server)
         .await;
 
-    let client = test_client(&server.uri()).with_auth("test-token");
-    client.revoke_trusted_token().await.unwrap();
+    let client = test_client(&server.uri()).with_auth("regular-api-token");
+    client
+        .revoke_trusted_token("temp-trustpub-token")
+        .await
+        .unwrap();
 }
 
 // ── retry ────────────────────────────────────────────────────────────────────

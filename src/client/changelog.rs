@@ -91,6 +91,82 @@ fn parse_github_repo(url: &str) -> Option<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::CratesIoClient;
+    use std::time::Duration;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn crate_json(name: &str, repository: Option<&str>) -> serde_json::Value {
+        let mut c = serde_json::json!({
+            "name": name,
+            "max_version": "1.0.0",
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z",
+        });
+        if let Some(r) = repository {
+            c["repository"] = serde_json::json!(r);
+        }
+        serde_json::json!({ "crate": c, "versions": [] })
+    }
+
+    #[tokio::test]
+    async fn fetch_changelog_found() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/crates/mycrate"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(crate_json("mycrate", Some("https://github.com/owner/repo"))),
+            )
+            .mount(&server)
+            .await;
+        // First filename tried (CHANGELOG.md) resolves on the raw host.
+        Mock::given(method("GET"))
+            .and(path("/owner/repo/HEAD/CHANGELOG.md"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string("# Changelog\n\n## 1.0.0\n- initial"),
+            )
+            .mount(&server)
+            .await;
+
+        let client = CratesIoClient::with_base_url(
+            "test",
+            Duration::from_millis(0),
+            Duration::from_secs(5),
+            &server.uri(),
+        )
+        .unwrap()
+        .with_github_raw_url(&server.uri());
+        match client.fetch_changelog("mycrate").await.unwrap() {
+            ChangelogResult::Found { filename, content } => {
+                assert_eq!(filename, "CHANGELOG.md");
+                assert!(content.contains("# Changelog"));
+            }
+            _ => panic!("expected ChangelogResult::Found"),
+        }
+    }
+
+    #[tokio::test]
+    async fn fetch_changelog_no_repository() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/crates/norepo"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(crate_json("norepo", None)))
+            .mount(&server)
+            .await;
+
+        let client = CratesIoClient::with_base_url(
+            "test",
+            Duration::from_millis(0),
+            Duration::from_secs(5),
+            &server.uri(),
+        )
+        .unwrap();
+        assert!(matches!(
+            client.fetch_changelog("norepo").await.unwrap(),
+            ChangelogResult::NoRepository
+        ));
+    }
 
     #[test]
     fn parse_github_repo_standard() {
