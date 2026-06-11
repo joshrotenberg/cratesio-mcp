@@ -487,9 +487,17 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
             // Codex CLI, Cursor, can still call tools) are the default in
             // tower-mcp 0.10+; use require_sessions() to opt into strict mode.
             // See: https://github.com/joshrotenberg/cratesio-mcp/issues/61
+            //
+            // auto_reinitialize_sessions: when a client presents an unknown
+            // session id (e.g. after a deploy/restart wipes the in-memory store),
+            // the server transparently re-initializes it instead of returning
+            // -32005, so the client continues without a reconnect storm. This is
+            // the standalone mitigation for the GET / churn in #97 (no external
+            // SessionStore required for our single-instance deployment).
             let transport = if args.cache_enabled {
                 HttpTransport::new(router)
                     .disable_origin_validation()
+                    .auto_reinitialize_sessions(true)
                     .layer(
                         builder
                             .layer(cache)
@@ -499,6 +507,7 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
             } else {
                 HttpTransport::new(router)
                     .disable_origin_validation()
+                    .auto_reinitialize_sessions(true)
                     .layer(builder.layer(McpTracingLayer::new()).into_inner())
             };
 
