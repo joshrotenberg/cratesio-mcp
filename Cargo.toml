@@ -21,7 +21,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Core MCP
-tower-mcp = { version = "0.9.1", features = ["http", "testing"] }
+tower-mcp = { version = "0.12", features = ["http", "testing"] }
 # HTTP server types, for the client-IP request-logging middleware on the HTTP transport
 axum = "0.8"
 
