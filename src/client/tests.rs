@@ -222,6 +222,48 @@ async fn crate_owners_parses_response() {
     assert_eq!(owners[0].url, "https://github.com/joshrotenberg");
 }
 
+// ── crate_user_owners ───────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn crate_user_owners_parses_response() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/crates/tower-mcp/owner_user"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(OWNERS_JSON, "application/json"))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri());
+    let owners = client.crate_user_owners("tower-mcp").await.unwrap();
+
+    assert_eq!(owners.len(), 1);
+    assert_eq!(owners[0].login, "joshrotenberg");
+    assert_eq!(owners[0].name.as_deref(), Some("Josh Rotenberg"));
+    assert_eq!(owners[0].kind.as_deref(), Some("user"));
+}
+
+// ── crate_team_owners ───────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn crate_team_owners_parses_response() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/crates/tower-mcp/owner_team"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(OWNERS_JSON, "application/json"))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri());
+    let owners = client.crate_team_owners("tower-mcp").await.unwrap();
+
+    assert_eq!(owners.len(), 1);
+    assert_eq!(owners[0].login, "joshrotenberg");
+}
+
 // ── summary ────────────────────────────────────────────────────────────────
 
 const SUMMARY_JSON: &str = r#"{
@@ -1782,6 +1824,24 @@ async fn exchange_oidc_token_sends_post() {
     let token = client.exchange_oidc_token("my-jwt").await.unwrap();
 
     assert_eq!(token, "cio-publish-token-abc");
+}
+
+// ── revoke_trusted_token ────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn revoke_trusted_token_sends_delete() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("DELETE"))
+        .and(path("/trustpub/tokens/42"))
+        .and(header("Authorization", "test-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server.uri()).with_auth("test-token");
+    client.revoke_trusted_token(42).await.unwrap();
 }
 
 // ── retry ────────────────────────────────────────────────────────────────────
