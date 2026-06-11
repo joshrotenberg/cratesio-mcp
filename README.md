@@ -10,6 +10,8 @@
 
 Gives your AI agent access to crate search, documentation, dependency analysis, download stats, and security auditing -- everything it needs to make informed decisions about Rust dependencies.
 
+Under the hood it's also a standalone, dependency-light **crates.io API client library** -- ~46 endpoints with full read *and* write coverage, no `crates_io_api` dependency -- that the MCP tools are built on and that you can use directly. See [Built-in crates.io client](#built-in-cratesio-client).
+
 ## Quick start
 
 ### Hosted (no install)
@@ -159,9 +161,14 @@ cratesio-mcp --transport http --port 3000
 
 The HTTP transport includes a [tower](https://github.com/tower-rs/tower) middleware stack: timeout, rate limiting, bulkhead concurrency control, optional response caching, and structured tracing.
 
-## Library usage
+## Built-in crates.io client
 
-The crate also exposes a typed async client for the crates.io API:
+`cratesio-mcp` is built on its own typed async crates.io API client -- **no `crates_io_api` dependency**. It's a first-class part of the crate, not an afterthought, and you can use it directly as a library:
+
+- **~46 endpoints** across crates, versions, owners, categories, keywords, users, teams, API tokens, publishing, and trusted publishing.
+- **Full read *and* write coverage** -- search and metadata, plus authenticated operations (publish, yank/unyank, add/remove owners, manage API tokens, configure trusted publishing) via `.with_auth(token)`.
+- **Resilient by default** -- built-in rate limiting (respects the crates.io crawling policy) and retry with exponential backoff on transient failures (429 / 5xx).
+- **Documented and tested** -- every public method has doc comments, with a wiremock test suite covering the endpoints (including the authenticated write paths).
 
 ```rust
 use std::time::Duration;
@@ -180,7 +187,7 @@ let results = client.crates(query).await?;
 let info = client.get_crate("tower-mcp").await?;
 ```
 
-The client covers 46 endpoints across crates, versions, owners, categories, keywords, users, teams, tokens, publishing, and trusted publishing.
+The OSV.dev vulnerability client (`audit_dependencies`) and the docs.rs rustdoc-JSON client (`get_crate_docs` / `get_doc_item` / `search_docs`) ship alongside it.
 
 ## License
 
