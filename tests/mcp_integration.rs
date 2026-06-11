@@ -1,3 +1,4 @@
+#![cfg(feature = "mcp")]
 //! MCP integration tests using tower-mcp's TestClient + wiremock.
 //!
 //! These tests exercise the full JSON-RPC pipeline: client request -> router ->

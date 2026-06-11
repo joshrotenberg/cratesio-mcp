@@ -18,12 +18,29 @@ path = "src/lib.rs"
 [[bin]]
 name = "cratesio-mcp"
 path = "src/main.rs"
+required-features = ["mcp"]
+
+[features]
+default = ["mcp"]
+# The crates.io + docs.rs + OSV client library only, no MCP server machinery.
+# Use with `default-features = false, features = ["client"]`.
+client = []
+# The full MCP server: tools, prompts, resources, and both transports.
+mcp = [
+    "dep:tower-mcp",
+    "dep:axum",
+    "dep:clap",
+    "dep:schemars",
+    "dep:tracing-subscriber",
+    "dep:tower",
+    "dep:tower-resilience",
+]
 
 [dependencies]
-# Core MCP
-tower-mcp = { version = "0.12", features = ["http", "testing"] }
+# Core MCP (server only)
+tower-mcp = { version = "0.12", features = ["http", "testing"], optional = true }
 # HTTP server types, for the client-IP request-logging middleware on the HTTP transport
-axum = "0.8"
+axum = { version = "0.8", optional = true }
 
 # HTTP client for crates.io API
 reqwest = { version = "0.12", features = ["json", "gzip"] }
@@ -35,24 +52,24 @@ thiserror = "2"
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
-# CLI
-clap = { version = "4", features = ["derive"] }
+# CLI (server binary only)
+clap = { version = "4", features = ["derive"], optional = true }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# Schema generation
-schemars = "1"
+# Schema generation (MCP tool input schemas)
+schemars = { version = "1", optional = true }
 
 # Tracing
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
 
-# Tower middleware
-tower = { version = "0.5", features = ["util", "timeout", "limit"] }
+# Tower middleware (server only)
+tower = { version = "0.5", features = ["util", "timeout", "limit"], optional = true }
 # 0.7.1 adds SharedCacheLayer for cross-session cache sharing
-tower-resilience = { version = "0.7.1", default-features = false, features = ["bulkhead", "ratelimiter", "cache"] }
+tower-resilience = { version = "0.7.1", default-features = false, features = ["bulkhead", "ratelimiter", "cache"], optional = true }
 
 [dev-dependencies]
 wiremock = "0.6"

@@ -42,6 +42,18 @@ jobs:
       - run: cargo test --lib
       - run: cargo test --doc
 
+  client-only:
+    name: Client-only feature
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Build + test the library with just the `client` feature (no MCP stack),
+      # so the client-only consumer path can't bit-rot.
+      - run: cargo clippy --no-default-features --features client --lib -- -D warnings
+      - run: cargo test --no-default-features --features client --lib
+
   msrv:
     name: MSRV (1.90)
     runs-on: ubuntu-latest
