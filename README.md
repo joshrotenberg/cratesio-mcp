@@ -90,7 +90,7 @@ Add to `claude_desktop_config.json`:
 
 ## What's included
 
-### Tools (23)
+### Tools (28)
 
 | Tool | Description |
 |------|-------------|
@@ -117,6 +117,11 @@ Add to `claude_desktop_config.json`:
 | `get_category` | Details for a specific category |
 | `get_keywords` | Browse crates.io keywords |
 | `get_keyword` | Details for a specific keyword |
+| `compare_crates` | Compare two or more crates side by side (downloads, versions, dependencies, freshness) |
+| `get_dependency_tree` | Full transitive dependency tree with configurable depth and deduplication markers |
+| `crate_health_check` | Comprehensive health report (maturity, adoption, maintenance, security, dependency weight) |
+| `find_alternatives` | Find and compare alternative crates based on keywords, downloads, and recent activity |
+| `get_crate_changelog` | Changelog content from a crate's GitHub repository, optionally filtered to a version |
 
 ### Resources (4)
 
@@ -127,12 +132,16 @@ Add to `claude_desktop_config.json`:
 | `crates://{name}/docs` | Documentation structure |
 | Recent searches | Recent search queries and results |
 
-### Prompts (2)
+### Prompts (6)
 
 | Prompt | Description |
 |--------|-------------|
 | `analyze_crate` | Guided comprehensive crate analysis |
 | `compare_crates` | Compare multiple crates side by side |
+| `stack_review` | Evaluate a set of crates as a cohesive stack for compatibility and health |
+| `evaluate_dependencies` | Evaluate a project's dependencies for health, security, and maintenance |
+| `recommend_crates` | Find and evaluate crates for a given use case |
+| `migration_guide` | Generate a migration guide for switching between two crates |
 
 ## Transports
 
