@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-06-11
+
+### Bug Fixes
+
+- Restore auto_start_machines=true to fix Fly outage ([#131](https://github.com/joshrotenberg/cratesio-mcp/pull/131))
+- Keep Fly machine always-on (disable auto-stop) to end outage cycle ([#135](https://github.com/joshrotenberg/cratesio-mcp/pull/135))
+- Bypass response cache by a process-unique nonce, not request id ([#136](https://github.com/joshrotenberg/cratesio-mcp/pull/136))
+
+### Documentation
+
+- Feature the built-in crates.io client prominently in the README ([#139](https://github.com/joshrotenberg/cratesio-mcp/pull/139))
+
+### Miscellaneous Tasks
+
+- Add Fly health check and harden deploy verify step (closes #133) ([#137](https://github.com/joshrotenberg/cratesio-mcp/pull/137))
+
+
+
 ## [0.2.0] - 2026-06-11
 
 ### Bug Fixes
