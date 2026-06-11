@@ -30,8 +30,13 @@ jobs:
 
       - name: Reap stale machines
         run: |
+          # Only reap genuinely-stale machines (stopped/suspended leftovers).
+          # NOT `state != "started"` -- with --strategy immediate the freshly
+          # deployed machine is briefly in "created"/"replacing" state when this
+          # runs, and the broad filter destroyed it, leaving zero machines (an
+          # HTTP 000 outage). With auto_stop = "off" there should be none anyway.
           echo "Destroying any stopped/suspended machines left from the deploy..."
-          flyctl machines list --json | jq -r '.[] | select(.state != "started") | .id' | xargs -I{} flyctl machines destroy {} --force || true
+          flyctl machines list --json | jq -r '.[] | select(.state == "stopped" or .state == "suspended") | .id' | xargs -I{} flyctl machines destroy {} --force || true
           echo "Active machines after reap:"
           flyctl machines list
         env:
