@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-06-12
+
+### Bug Fixes
+
+- Reap only stopped/suspended machines, not in-flight ones ([#145](https://github.com/joshrotenberg/cratesio-mcp/pull/145))
+
+### Miscellaneous Tasks
+
+- Finish the client audit follow-ups (closes #138) ([#146](https://github.com/joshrotenberg/cratesio-mcp/pull/146))
+
+
+
 ## [0.2.1] - 2026-06-11
 
 ### Bug Fixes
