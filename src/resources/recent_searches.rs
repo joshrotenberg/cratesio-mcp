@@ -26,7 +26,7 @@ pub fn build(state: Arc<AppState>) -> Resource {
                         blob: None,
                         meta: None,
                     }],
-                    meta: None,
+                    ..Default::default()
                 })
             }
         })
