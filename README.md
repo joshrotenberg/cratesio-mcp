@@ -6,11 +6,11 @@
 [![License](https://img.shields.io/crates/l/cratesio-mcp.svg)](https://github.com/joshrotenberg/cratesio-mcp#license)
 [![MSRV](https://img.shields.io/crates/msrv/cratesio-mcp.svg)](https://github.com/joshrotenberg/cratesio-mcp)
 
-[MCP](https://modelcontextprotocol.io) server for querying [crates.io](https://crates.io) -- the Rust package registry. Built with [tower-mcp](https://github.com/joshrotenberg/tower-mcp).
+[MCP](https://modelcontextprotocol.io) server for querying [crates.io](https://crates.io), the Rust package registry. Built with [tower-mcp](https://github.com/joshrotenberg/tower-mcp).
 
-Gives your AI agent access to crate search, documentation, dependency analysis, download stats, and security auditing -- everything it needs to make informed decisions about Rust dependencies.
+Gives your AI agent crate search, documentation, dependency analysis, download stats, and security auditing to make informed decisions about Rust dependencies.
 
-Under the hood it's also a standalone, dependency-light **crates.io API client library** -- ~46 endpoints with full read *and* write coverage, no `crates_io_api` dependency -- that the MCP tools are built on and that you can use directly. See [Built-in crates.io client](#built-in-cratesio-client).
+Under the hood it is also a standalone, dependency-light **crates.io API client library** that the MCP tools are built on and that you can use directly: ~46 endpoints with full read and write coverage, no `crates_io_api` dependency. See [Built-in crates.io client](#built-in-cratesio-client).
 
 ## Quick start
 
@@ -148,8 +148,8 @@ Add to `claude_desktop_config.json`:
 
 ## Transports
 
-- **stdio** (default) -- for Claude Desktop, Claude Code, and other MCP clients
-- **HTTP/SSE** -- Streamable HTTP with server-sent events (MCP 2025-11-25 spec)
+- **stdio** (default): for Claude Desktop, Claude Code, and other MCP clients
+- **HTTP/SSE**: Streamable HTTP with server-sent events (MCP 2025-11-25 spec)
 
 ```bash
 # stdio (default)
@@ -163,12 +163,12 @@ The HTTP transport includes a [tower](https://github.com/tower-rs/tower) middlew
 
 ## Built-in crates.io client
 
-`cratesio-mcp` is built on its own typed async crates.io API client -- **no `crates_io_api` dependency**. It's a first-class part of the crate, not an afterthought, and you can use it directly as a library:
+`cratesio-mcp` is built on its own typed async crates.io API client, with **no `crates_io_api` dependency**. You can use it directly as a library:
 
 - **~46 endpoints** across crates, versions, owners, categories, keywords, users, teams, API tokens, publishing, and trusted publishing.
-- **Full read *and* write coverage** -- search and metadata, plus authenticated operations (publish, yank/unyank, add/remove owners, manage API tokens, configure trusted publishing) via `.with_auth(token)`.
-- **Resilient by default** -- built-in rate limiting (respects the crates.io crawling policy) and retry with exponential backoff on transient failures (429 / 5xx).
-- **Documented and tested** -- every public method has doc comments, with a wiremock test suite covering the endpoints (including the authenticated write paths).
+- **Full read and write coverage:** search and metadata, plus authenticated operations (publish, yank/unyank, add/remove owners, manage API tokens, configure trusted publishing) via `.with_auth(token)`.
+- **Resilient by default:** built-in rate limiting (respects the crates.io crawling policy) and retry with exponential backoff on transient failures (429 / 5xx).
+- **Documented and tested:** every public method has doc comments, with a wiremock test suite covering the endpoints (including the authenticated write paths).
 
 ```rust
 use std::time::Duration;
