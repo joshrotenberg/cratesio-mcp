@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2026-07-24
+
+### Documentation
+
+- Document single-instance requirement in fly.toml ([#147](https://github.com/joshrotenberg/cratesio-mcp/pull/147)) ([#150](https://github.com/joshrotenberg/cratesio-mcp/pull/150))
+- Tighten README prose and drop dash-as-punctuation ([#151](https://github.com/joshrotenberg/cratesio-mcp/pull/151))
+
+
+
 ## [0.3.0] - 2026-06-12
 
 ### Bug Fixes
