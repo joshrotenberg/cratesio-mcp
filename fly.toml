@@ -17,6 +17,13 @@ primary_region = "sjc"
   # service this lifecycle churn isn't worth it; just keep the machine running.
   auto_stop_machines = "off"
   auto_start_machines = true
+  # Run exactly ONE machine. MCP sessions are held in-memory per instance with
+  # no shared session store and no session-sticky routing, so a second machine
+  # scatters same-session requests across instances that don't share state and
+  # the first post-initialize request fails with -32600 (#147). Note this key is
+  # a floor, not a cap: `fly launch` creates 2 machines by default and this line
+  # will not remove the extra one. Keep the count at 1 with `fly scale count 1`;
+  # only scale past 1 after adding a shared SessionStore or stateless mode.
   min_machines_running = 1
   processes = ["app"]
   [http_service.concurrency]
