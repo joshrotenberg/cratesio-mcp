@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-08-02
+
+### Features
+
+- Adopt final MCP protocol and structured outputs ([#153](https://github.com/joshrotenberg/cratesio-mcp/pull/153))
+
+### Miscellaneous Tasks
+
+- Harden release housekeeping ([#155](https://github.com/joshrotenberg/cratesio-mcp/pull/155))
+
+
+
 ## [0.3.1] - 2026-07-24
 
 ### Documentation
