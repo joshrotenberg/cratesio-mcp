@@ -40,6 +40,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --lib
+      - run: cargo test --test mcp_integration
       - run: cargo test --doc
 
   client-only:
