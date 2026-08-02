@@ -61,87 +61,25 @@ jobs:
           echo "Health check failed after $MAX_RETRIES attempts"
           exit 1
 
-      - name: Verify deployment (MCP protocol)
-        run: |
-          MAX_RETRIES=3
-          RETRY_DELAY=5
+  validate:
+    name: Validate released MCP API
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.repository == 'joshrotenberg/cratesio-mcp'
+    env:
+      MCP_ENDPOINT: https://cratesio-mcp.fly.dev/
+      MCP_REPL_VERSION: "0.1.7"
+      EXPECTED_VERSION: ${{ github.event_name == 'push' && github.ref_name || '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
 
-          for attempt in $(seq 1 $MAX_RETRIES); do
-            echo "=== Attempt $attempt of $MAX_RETRIES ==="
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-            echo "Sending 2026-07-28 server/discover request..."
-            DISCOVER_RESPONSE=$(curl -s -X POST https://cratesio-mcp.fly.dev/ \
-              -H "Content-Type: application/json" \
-              -H "Accept: application/json" \
-              -H "MCP-Protocol-Version: 2026-07-28" \
-              -H "Mcp-Method: server/discover" \
-              -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"deploy-check","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}')
+      - name: Install mcp-repl
+        run: cargo install mcp-repl --version "$MCP_REPL_VERSION" --locked
 
-            echo "Discover response: $DISCOVER_RESPONSE"
-
-            if ! echo "$DISCOVER_RESPONSE" | grep -q '"supportedVersions"' || \
-               ! echo "$DISCOVER_RESPONSE" | grep -q '"2026-07-28"'; then
-              echo "2026-07-28 protocol verification failed"
-              if [ $attempt -lt $MAX_RETRIES ]; then
-                echo "Retrying in ${RETRY_DELAY}s..."
-                sleep $RETRY_DELAY
-                continue
-              fi
-              exit 1
-            fi
-
-            echo "Sending initialize request..."
-            INIT_RESPONSE=$(curl -s -D /tmp/headers.txt -X POST https://cratesio-mcp.fly.dev/ \
-              -H "Content-Type: application/json" \
-              -H "Accept: application/json" \
-              -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"deploy-check","version":"1.0"}}}')
-
-            echo "Init response: $INIT_RESPONSE"
-
-            SESSION_ID=$(grep -i "mcp-session-id" /tmp/headers.txt | cut -d' ' -f2 | tr -d '\r')
-
-            echo "Session ID: $SESSION_ID"
-
-            if [ -z "$SESSION_ID" ]; then
-              echo "Failed to get session ID"
-              if [ $attempt -lt $MAX_RETRIES ]; then
-                echo "Retrying in ${RETRY_DELAY}s..."
-                sleep $RETRY_DELAY
-                continue
-              fi
-              exit 1
-            fi
-
-            sleep 1
-
-            echo "Sending initialized notification..."
-            curl -s -X POST https://cratesio-mcp.fly.dev/ \
-              -H "Content-Type: application/json" \
-              -H "Accept: application/json" \
-              -H "MCP-Session-Id: $SESSION_ID" \
-              -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
-
-            sleep 1
-
-            echo "Sending test tool call..."
-            TOOL_RESPONSE=$(curl -s -X POST https://cratesio-mcp.fly.dev/ \
-              -H "Content-Type: application/json" \
-              -H "Accept: application/json" \
-              -H "MCP-Session-Id: $SESSION_ID" \
-              -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"search_crates","arguments":{"query":"tower"}}}')
-
-            echo "Tool response: $TOOL_RESPONSE"
-
-            if echo "$TOOL_RESPONSE" | grep -q '"result"'; then
-              echo "MCP protocol verification successful!"
-              exit 0
-            else
-              echo "MCP protocol verification failed - unexpected response"
-              if [ $attempt -lt $MAX_RETRIES ]; then
-                echo "Retrying in ${RETRY_DELAY}s..."
-                sleep $RETRY_DELAY
-                continue
-              fi
-              exit 1
-            fi
-          done
+      - name: Validate released server
+        run: bash scripts/validate-release.sh
