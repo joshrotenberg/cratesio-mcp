@@ -10,6 +10,16 @@ homepage = "https://github.com/joshrotenberg/cratesio-mcp"
 repository = "https://github.com/joshrotenberg/cratesio-mcp"
 keywords = ["mcp", "crates-io", "rust", "tower"]
 categories = ["development-tools", "web-programming"]
+include = [
+    "/src/**",
+    "/tests/**",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE-APACHE",
+    "/LICENSE-MIT",
+]
 
 [lib]
 name = "cratesio_mcp"
