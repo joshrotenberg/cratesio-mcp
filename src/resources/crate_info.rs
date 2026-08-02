@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tower_mcp::protocol::{ReadResourceResult, ResourceContent};
+use tower_mcp::protocol::{CacheScope, ReadResourceResult, ResourceContent};
 use tower_mcp::resource::{ResourceTemplate, ResourceTemplateBuilder};
 
 use crate::state::{AppState, format_number};
@@ -58,7 +58,9 @@ pub fn build(state: Arc<AppState>) -> ResourceTemplate {
                         blob: None,
                         meta: None,
                     }],
-                    ..Default::default()
+                    ttl_ms: Some(300_000),
+                    cache_scope: Some(CacheScope::Public),
+                    meta: None,
                 })
             }
         })
@@ -68,8 +70,6 @@ pub fn build(state: Arc<AppState>) -> ResourceTemplate {
 mod tests {
     use super::*;
     use std::time::Duration;
-
-    use tokio::sync::RwLock;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -90,7 +90,6 @@ mod tests {
             docsrs_client: DocsRsClient::new("test", Duration::from_secs(30)).unwrap(),
             osv_client: OsvClient::new("test", Duration::from_secs(30)).unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 

@@ -3,14 +3,15 @@
 use std::sync::Arc;
 
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
 use crate::client::changelog::ChangelogResult;
 use crate::state::AppState;
+use crate::tools::output::{schema, structured};
 
 /// Input for fetching a crate's changelog
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -23,6 +24,28 @@ pub struct ChangelogInput {
     version: Option<String>,
 }
 
+/// Result of locating and optionally filtering a crate changelog.
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(tag = "status", rename_all = "snake_case")]
+enum ChangelogOutput {
+    Found {
+        name: String,
+        version: Option<String>,
+        filename: String,
+        content: String,
+    },
+    NoRepository {
+        name: String,
+    },
+    UnsupportedRepository {
+        name: String,
+        url: String,
+    },
+    NotFound {
+        name: String,
+    },
+}
+
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_crate_changelog")
         .title("Get Crate Changelog")
@@ -32,8 +55,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
              If a version is provided, returns only that version's section. \
              Only GitHub repositories are supported.",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<ChangelogOutput>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -45,20 +68,32 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     .tool_context("Failed to fetch changelog")?;
 
                 match result {
-                    ChangelogResult::NoRepository => Ok(CallToolResult::text(format!(
-                        "No repository URL found for crate `{}`.",
-                        input.name
-                    ))),
-                    ChangelogResult::NotGitHub { url } => Ok(CallToolResult::text(format!(
-                        "Repository for `{}` is not on GitHub (`{}`). \
-                         Only GitHub repositories are supported.",
-                        input.name, url
-                    ))),
-                    ChangelogResult::NotFound => Ok(CallToolResult::text(format!(
-                        "No changelog file found in the GitHub repository for `{}`. \
-                         Tried: CHANGELOG.md, CHANGES.md, HISTORY.md, RELEASES.md.",
-                        input.name
-                    ))),
+                    ChangelogResult::NoRepository => {
+                        let output = format!("No repository URL found for crate `{}`.", input.name);
+                        let result = ChangelogOutput::NoRepository { name: input.name };
+                        structured(output, &result)
+                    }
+                    ChangelogResult::NotGitHub { url } => {
+                        let output = format!(
+                            "Repository for `{}` is not on GitHub (`{}`). \
+                             Only GitHub repositories are supported.",
+                            input.name, url
+                        );
+                        let result = ChangelogOutput::UnsupportedRepository {
+                            name: input.name,
+                            url,
+                        };
+                        structured(output, &result)
+                    }
+                    ChangelogResult::NotFound => {
+                        let output = format!(
+                            "No changelog file found in the GitHub repository for `{}`. \
+                             Tried: CHANGELOG.md, CHANGES.md, HISTORY.md, RELEASES.md.",
+                            input.name
+                        );
+                        let result = ChangelogOutput::NotFound { name: input.name };
+                        structured(output, &result)
+                    }
                     ChangelogResult::Found { filename, content } => {
                         let body = match &input.version {
                             Some(v) => extract_version_section(&content, v).unwrap_or_else(|| {
@@ -70,10 +105,14 @@ pub fn build(state: Arc<AppState>) -> Tool {
                             }),
                             None => content,
                         };
-                        Ok(CallToolResult::text(format!(
-                            "# {} - {}\n\n{}",
-                            input.name, filename, body
-                        )))
+                        let output = format!("# {} - {}\n\n{}", input.name, filename, body);
+                        let result = ChangelogOutput::Found {
+                            name: input.name,
+                            version: input.version,
+                            filename,
+                            content: body,
+                        };
+                        structured(output, &result)
                     }
                 }
             },

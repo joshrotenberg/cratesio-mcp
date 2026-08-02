@@ -5,11 +5,13 @@ use std::sync::Arc;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
+use crate::client::Dependency;
 use crate::state::AppState;
+use crate::tools::output::{CollectionOutput, schema, structured};
 
 /// Input for getting dependencies
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -31,8 +33,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
             "Get dependencies for a crate version. Shows required and optional deps, \
              version requirements, and whether they're build or dev dependencies.",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<CollectionOutput<Dependency>>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -98,7 +100,16 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     normal.len() + build.len() + if input.include_dev { dev.len() } else { 0 };
                 output.push_str(&format!("**Total: {} dependencies**\n", total));
 
-                Ok(CallToolResult::text(output))
+                let result = CollectionOutput {
+                    name: input.name,
+                    version: Some(version.to_string()),
+                    total: total as u64,
+                    items: deps
+                        .into_iter()
+                        .filter(|dependency| input.include_dev || dependency.kind != "dev")
+                        .collect(),
+                };
+                structured(output, &result)
             },
         )
         .build()
@@ -108,8 +119,6 @@ pub fn build(state: Arc<AppState>) -> Tool {
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
-
-    use tokio::sync::RwLock;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -137,7 +146,6 @@ mod tests {
             )
             .unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 

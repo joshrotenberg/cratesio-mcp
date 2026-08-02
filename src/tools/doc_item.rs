@@ -5,12 +5,13 @@ use std::sync::Arc;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
 use crate::docs::format;
 use crate::state::AppState;
+use crate::tools::output::{DocumentOutput, schema, structured};
 
 /// Input for getting item documentation
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -36,7 +37,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
              from docs.rs. Includes the item's signature, doc comments, and for structs, \
              the list of public methods.",
         )
-        .read_only()
+        .read_only_safe()
+        .output_schema(schema::<DocumentOutput>())
         .extractor_handler(
             state,
             |State(state): State<Arc<AppState>>, Json(input): Json<GetDocItemInput>| async move {
@@ -55,7 +57,13 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     })?;
 
                 let output = format::format_item_detail(&krate, item);
-                Ok(CallToolResult::text(output))
+                let result = DocumentOutput {
+                    name: input.name,
+                    version: input.version,
+                    path: Some(input.item_path),
+                    content: Some(output.clone()),
+                };
+                structured(output, &result)
             },
         )
         .build()

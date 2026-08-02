@@ -5,11 +5,12 @@ use std::sync::Arc;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
 use crate::state::AppState;
+use crate::tools::output::{FeaturesOutput, schema, structured};
 
 /// Input for getting feature flags
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -29,8 +30,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
              and their sub-feature/dependency activations. Useful for understanding \
              what optional functionality a crate provides.",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<FeaturesOutput>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -57,7 +58,12 @@ pub fn build(state: Arc<AppState>) -> Tool {
 
                 if features.is_empty() {
                     output.push_str("No feature flags defined.\n");
-                    return Ok(CallToolResult::text(output));
+                    let result = FeaturesOutput {
+                        name: input.name,
+                        version,
+                        features,
+                    };
+                    return structured(output, &result);
                 }
 
                 // Show default features first
@@ -99,7 +105,12 @@ pub fn build(state: Arc<AppState>) -> Tool {
 
                 output.push_str(&format!("**Total: {} feature flags**\n", features.len()));
 
-                Ok(CallToolResult::text(output))
+                let result = FeaturesOutput {
+                    name: input.name,
+                    version,
+                    features,
+                };
+                structured(output, &result)
             },
         )
         .build()

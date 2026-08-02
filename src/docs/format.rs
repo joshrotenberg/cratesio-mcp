@@ -769,7 +769,7 @@ fn format_trait_definition(krate: &Crate, name: &str, t: &Trait) -> String {
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-fn item_kind_label(inner: &ItemEnum) -> &'static str {
+pub(crate) fn item_kind_label(inner: &ItemEnum) -> &'static str {
     match inner {
         ItemEnum::Module(_) => "mod",
         ItemEnum::Function(_) => "fn",
@@ -796,7 +796,7 @@ fn item_kind_label(inner: &ItemEnum) -> &'static str {
 }
 
 /// Extract the first sentence from a doc string.
-fn first_sentence(docs: &str) -> String {
+pub(crate) fn first_sentence(docs: &str) -> String {
     let first_line = docs.lines().next().unwrap_or("");
     // Truncate at first period followed by space or end
     if let Some(pos) = first_line.find(". ") {

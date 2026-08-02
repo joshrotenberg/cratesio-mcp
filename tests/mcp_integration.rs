@@ -7,9 +7,14 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use axum::{body::Body, http::Request};
 use cratesio_mcp::{prompts, resources, state::AppState, tools};
 use serde_json::json;
-use tower_mcp::{McpRouter, TestClient};
+use tower::ServiceExt;
+use tower_mcp::{
+    HttpTransport, McpRouter, TestClient,
+    protocol::{CacheScope, DeprecationInfo},
+};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -22,6 +27,14 @@ fn test_state(server: &MockServer) -> Arc<AppState> {
 fn test_router(state: Arc<AppState>) -> McpRouter {
     McpRouter::new()
         .server_info("cratesio-mcp", "0.1.0")
+        .list_ttl(3_600_000)
+        .cache_scope(CacheScope::Public)
+        .logging_deprecated(DeprecationInfo {
+            since: Some("2026-07-28".to_string()),
+            message: Some("Use stderr or OpenTelemetry-compatible tracing.".to_string()),
+            remove_in: None,
+            replacement: Some("stderr or OpenTelemetry".to_string()),
+        })
         .tool(tools::search::build(state.clone()))
         .tool(tools::info::build(state.clone()))
         .tool(tools::versions::build(state.clone()))
@@ -47,7 +60,10 @@ fn test_router(state: Arc<AppState>) -> McpRouter {
         .tool(tools::changelog::build(state.clone()))
         .tool(tools::alternatives::build(state.clone()))
         .tool(tools::release_timeline::build(state.clone()))
-        .resource(resources::recent_searches::build(state.clone()))
+        .tool(tools::crate_docs::build(state.clone()))
+        .tool(tools::doc_item::build(state.clone()))
+        .tool(tools::search_docs::build(state.clone()))
+        .tool(tools::audit::build(state.clone()))
         .resource_template(resources::crate_info::build(state.clone()))
         .resource_template(resources::readme::build(state.clone()))
         .resource_template(resources::docs::build(state.clone()))
@@ -261,13 +277,13 @@ async fn mount_get_crate(server: &MockServer) {
 // ── Discovery tests ────────────────────────────────────────────────────────
 
 #[tokio::test]
-async fn list_tools_returns_all_24() {
+async fn list_tools_returns_all_29_with_safe_annotations() {
     let server = MockServer::start().await;
     let mut client = initialized_client(&server).await;
 
     let tools = client.list_tools().await;
 
-    assert_eq!(tools.len(), 25);
+    assert_eq!(tools.len(), 29);
     let names: Vec<&str> = tools
         .iter()
         .filter_map(|t| t.get("name").and_then(|n| n.as_str()))
@@ -297,20 +313,113 @@ async fn list_tools_returns_all_24() {
     assert!(names.contains(&"get_crate_changelog"));
     assert!(names.contains(&"get_alternatives"));
     assert!(names.contains(&"get_release_timeline"));
+    assert!(names.contains(&"get_crate_docs"));
+    assert!(names.contains(&"get_doc_item"));
+    assert!(names.contains(&"search_docs"));
+    assert!(names.contains(&"audit_dependencies"));
+
+    for tool in tools {
+        let output_schema = tool
+            .get("outputSchema")
+            .unwrap_or_else(|| panic!("{} is missing outputSchema", tool["name"]));
+        jsonschema::validator_for(output_schema).unwrap_or_else(|error| {
+            panic!("{} has an invalid outputSchema: {error}", tool["name"])
+        });
+
+        let annotations = tool
+            .get("annotations")
+            .unwrap_or_else(|| panic!("{} is missing annotations", tool["name"]));
+        assert_eq!(annotations["readOnlyHint"], true, "{}", tool["name"]);
+        assert_eq!(annotations["destructiveHint"], false, "{}", tool["name"]);
+        assert_eq!(annotations["idempotentHint"], true, "{}", tool["name"]);
+    }
 }
 
 #[tokio::test]
-async fn list_resources_returns_recent_searches() {
+async fn list_results_include_public_cache_hints() {
+    let server = MockServer::start().await;
+    let mut client = initialized_client(&server).await;
+
+    let result = client.send_request("tools/list", None).await;
+
+    assert_eq!(result["ttlMs"], 3_600_000);
+    assert_eq!(result["cacheScope"], "public");
+}
+
+#[tokio::test]
+async fn final_protocol_discovery_is_enabled_without_a_session() {
+    let server = MockServer::start().await;
+    let router = test_router(test_state(&server));
+    let (app, handle) = HttpTransport::new(router)
+        .disable_origin_validation()
+        .into_router_with_handle();
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/")
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "server/discover")
+        .body(Body::from(
+            r#"{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"cratesio-mcp-test","version":"1.0.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}"#,
+        ))
+        .unwrap();
+
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert!(response.status().is_success());
+    assert_eq!(response.headers()["mcp-protocol-version"], "2026-07-28");
+    assert!(response.headers().get("mcp-session-id").is_none());
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let response: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let versions = response["result"]["supportedVersions"]
+        .as_array()
+        .expect("supportedVersions should be an array");
+    assert!(versions.iter().any(|version| version == "2026-07-28"));
+    assert_eq!(response["result"]["resultType"], "complete");
+    assert_eq!(
+        response["result"]["capabilities"]["logging"]["deprecated"]["since"],
+        "2026-07-28"
+    );
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/")
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/list")
+        .body(Body::from(
+            r#"{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"cratesio-mcp-test","version":"1.0.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}"#,
+        ))
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert!(response.status().is_success());
+    assert!(response.headers().get("mcp-session-id").is_none());
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let response: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(response["result"]["resultType"], "complete");
+    assert_eq!(response["result"]["ttlMs"], 3_600_000);
+    assert_eq!(response["result"]["cacheScope"], "public");
+    assert_eq!(response["result"]["tools"].as_array().unwrap().len(), 29);
+
+    assert_eq!(handle.session_count().await, 0);
+}
+
+#[tokio::test]
+async fn list_resources_is_empty_without_static_resources() {
     let server = MockServer::start().await;
     let mut client = initialized_client(&server).await;
 
     let resources = client.list_resources().await;
 
-    assert_eq!(resources.len(), 1);
-    assert_eq!(
-        resources[0].get("uri").and_then(|u| u.as_str()),
-        Some("crates://recent-searches")
-    );
+    assert!(resources.is_empty());
 }
 
 #[tokio::test]
@@ -364,11 +473,29 @@ async fn tool_search_crates() {
         .await;
 
     let mut client = initialized_client(&server).await;
+    let tools = client.list_tools().await;
+    let search_schema = tools
+        .iter()
+        .find(|tool| tool["name"] == "search_crates")
+        .and_then(|tool| tool.get("outputSchema"))
+        .expect("search_crates outputSchema");
     let result = client
         .call_tool("search_crates", json!({"query": "mcp"}))
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
+    let structured = result
+        .structured_content
+        .as_ref()
+        .expect("search_crates structuredContent");
+    let validator = jsonschema::validator_for(search_schema).expect("valid search output schema");
+    assert!(
+        validator.is_valid(structured),
+        "structuredContent did not match outputSchema: {structured}"
+    );
+    assert_eq!(structured["meta"]["total"], 1);
+    assert_eq!(structured["crates"][0]["name"], "tower-mcp");
     let text = result.all_text();
     assert!(text.contains("tower-mcp"));
     assert!(text.contains("Found 1 crates"));
@@ -385,6 +512,7 @@ async fn tool_get_crate_info() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("# tower-mcp"));
     assert!(text.contains("Tower-native MCP implementation"));
@@ -402,6 +530,7 @@ async fn tool_get_crate_versions() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("Version History"));
     assert!(text.contains("v0.6.0"));
@@ -428,6 +557,7 @@ async fn tool_get_dependencies() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("Dependencies"));
     assert!(text.contains("tokio"));
@@ -452,6 +582,7 @@ async fn tool_get_reverse_dependencies() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("Reverse Dependencies"));
     assert!(text.contains("cratesio-mcp"));
@@ -474,6 +605,7 @@ async fn tool_get_downloads() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("Download Statistics"));
 }
@@ -495,6 +627,7 @@ async fn tool_get_owners() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("Owners"));
     assert!(text.contains("joshrotenberg"));
@@ -515,6 +648,7 @@ async fn tool_get_summary() {
     let result = client.call_tool("get_summary", json!({})).await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("Crates.io Summary"));
     assert!(text.contains("new-crate"));
@@ -539,6 +673,7 @@ async fn tool_get_crate_authors() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("Authors"));
     assert!(text.contains("Josh Rotenberg"));
@@ -570,6 +705,7 @@ async fn tool_get_user() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("joshrotenberg"));
     assert!(text.contains("Josh Rotenberg"));
@@ -610,6 +746,7 @@ async fn tool_get_user_stats() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("joshrotenberg"));
     assert!(text.contains("50.0K"));
@@ -635,6 +772,7 @@ async fn tool_get_crate_readme() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("README"));
     assert!(text.contains("An MCP implementation"));
@@ -655,6 +793,7 @@ async fn tool_get_categories() {
     let result = client.call_tool("get_categories", json!({})).await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("Categories"));
     assert!(text.contains("Asynchronous"));
@@ -675,6 +814,7 @@ async fn tool_get_keywords() {
     let result = client.call_tool("get_keywords", json!({})).await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("Keywords"));
     assert!(text.contains("serde"));
@@ -701,6 +841,7 @@ async fn tool_get_version_downloads() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("Download Statistics"));
     assert!(text.contains("v0.6.0"));
@@ -726,6 +867,7 @@ async fn tool_get_crate_version() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("v0.6.0"));
     assert!(text.contains("MIT OR Apache-2.0"));
@@ -755,6 +897,7 @@ async fn tool_get_category() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("Asynchronous"));
     assert!(text.contains("3000"));
@@ -782,6 +925,7 @@ async fn tool_get_keyword() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("serde"));
     assert!(text.contains("5000"));
@@ -902,6 +1046,7 @@ async fn tool_compare_crates() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("tower-mcp"));
     assert!(text.contains("serde"));
@@ -924,6 +1069,7 @@ async fn tool_compare_crates_too_few() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("at least 2"));
 }
@@ -1205,42 +1351,6 @@ async fn tool_audit_dependencies_clean() {
 // ── Resource tests ─────────────────────────────────────────────────────────
 
 #[tokio::test]
-async fn resource_recent_searches_empty_initially() {
-    let server = MockServer::start().await;
-    let mut client = initialized_client(&server).await;
-
-    let result = client.read_resource("crates://recent-searches").await;
-
-    let text = result.first_text().expect("expected text content");
-    assert_eq!(text, "[]");
-}
-
-#[tokio::test]
-async fn resource_recent_searches_populated_after_search() {
-    let server = MockServer::start().await;
-
-    Mock::given(method("GET"))
-        .and(path("/crates"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(SEARCH_JSON, "application/json"))
-        .mount(&server)
-        .await;
-
-    let mut client = initialized_client(&server).await;
-
-    // Perform a search to populate recent searches
-    client
-        .call_tool("search_crates", json!({"query": "mcp"}))
-        .await;
-
-    // Now check the resource
-    let result = client.read_resource("crates://recent-searches").await;
-    let text = result.first_text().expect("expected text content");
-
-    assert!(text.contains("mcp"));
-    assert!(text.contains("tower-mcp"));
-}
-
-#[tokio::test]
 async fn resource_template_crate_info() {
     let server = MockServer::start().await;
     mount_get_crate(&server).await;
@@ -1251,6 +1361,8 @@ async fn resource_template_crate_info() {
     let text = result.first_text().expect("expected text content");
     assert!(text.contains("# tower-mcp"));
     assert!(text.contains("0.6.0"));
+    assert_eq!(result.ttl_ms, Some(300_000));
+    assert_eq!(result.cache_scope, Some(CacheScope::Public));
 }
 
 // ── Prompt tests ───────────────────────────────────────────────────────────
@@ -1349,6 +1461,7 @@ async fn tool_get_dependency_tree() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("Dependency Tree: tower-mcp v0.6.0"));
     assert!(text.contains("tokio"));
@@ -1410,6 +1523,7 @@ async fn tool_get_crate_health() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("Health Check: tower-mcp v0.6.0"));
     assert!(text.contains("Maturity"));
@@ -1502,6 +1616,7 @@ async fn tool_get_alternatives() {
         .await;
 
     assert!(!result.is_error);
+    assert!(result.structured_content.is_some());
     let text = result.all_text();
     assert!(text.contains("Alternatives to `tower-mcp`"));
     assert!(text.contains("axum-mcp"));

@@ -4,13 +4,15 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
+use crate::client::{Crate, Version};
 use crate::state::{AppState, format_number};
+use crate::tools::output::{schema, structured};
 
 /// Input for crate health check
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -22,6 +24,24 @@ pub struct HealthCheckInput {
     version: Option<String>,
 }
 
+/// Registry metadata and derived signals used by the crate health report.
+#[derive(Debug, Serialize, JsonSchema)]
+struct HealthCheckOutput {
+    crate_data: Crate,
+    version: Version,
+    age_days: i64,
+    days_since_update: i64,
+    total_versions: u64,
+    average_release_cadence_days: Option<i64>,
+    yanked_versions: u64,
+    reverse_dependencies: u64,
+    known_vulnerabilities: u64,
+    maintenance_status: String,
+    required_dependencies: u64,
+    optional_dependencies: u64,
+    build_dependencies: u64,
+}
+
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_crate_health")
         .title("Crate Health Check")
@@ -30,8 +50,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
              report covering maturity, adoption, maintenance, security, compatibility, and \
              dependency weight. Answers: \"should I use this crate?\"",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<HealthCheckOutput>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -225,7 +245,22 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     output.push_str(&format!("- **Homepage**: {}\n", home));
                 }
 
-                Ok(CallToolResult::text(output))
+                let result = HealthCheckOutput {
+                    crate_data: crate_data.clone(),
+                    version: version_detail,
+                    age_days,
+                    days_since_update,
+                    total_versions: total_versions as u64,
+                    average_release_cadence_days: cadence,
+                    yanked_versions: yanked_count as u64,
+                    reverse_dependencies: rev_deps.meta.total,
+                    known_vulnerabilities: vuln_count as u64,
+                    maintenance_status: freshness.to_string(),
+                    required_dependencies: normal_required.len() as u64,
+                    optional_dependencies: normal_optional.len() as u64,
+                    build_dependencies: build_deps.len() as u64,
+                };
+                structured(output, &result)
             },
         )
         .build()
@@ -235,8 +270,6 @@ pub fn build(state: Arc<AppState>) -> Tool {
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
-
-    use tokio::sync::RwLock;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -259,7 +292,6 @@ mod tests {
                 .unwrap(),
             osv_client: OsvClient::with_base_url("test", Duration::from_secs(30), osv_url).unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 

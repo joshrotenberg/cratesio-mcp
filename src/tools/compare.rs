@@ -1,21 +1,37 @@
 //! Compare crates tool
 
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tower_mcp::{
-    CallToolResult, Tool, ToolBuilder,
+    Tool, ToolBuilder,
     extract::{Json, State},
 };
 
 use crate::state::{AppState, format_number};
+use crate::tools::output::{schema, structured};
 
 /// Input for comparing crates
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct CompareInput {
     /// List of crate names to compare (2-5 crates)
     crates: Vec<String>,
+}
+
+/// One metric in a side-by-side crate comparison.
+#[derive(Debug, Serialize, JsonSchema)]
+struct ComparisonMetric {
+    metric: String,
+    values: BTreeMap<String, String>,
+}
+
+/// Machine-readable crate comparison, including validation messages.
+#[derive(Debug, Serialize, JsonSchema)]
+struct ComparisonOutput {
+    crates: Vec<String>,
+    message: Option<String>,
+    metrics: Vec<ComparisonMetric>,
 }
 
 pub fn build(state: Arc<AppState>) -> Tool {
@@ -25,8 +41,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
             "Compare two or more crates side by side. Returns a structured comparison of \
              downloads, versions, dependencies, reverse dependencies, and freshness.",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<ComparisonOutput>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -34,14 +50,23 @@ pub fn build(state: Arc<AppState>) -> Tool {
                 let names: Vec<&str> = input.crates.iter().map(|s| s.trim()).collect();
 
                 if names.len() < 2 {
-                    return Ok(CallToolResult::text(
-                        "Please provide at least 2 crate names separated by commas.",
-                    ));
+                    let message =
+                        "Please provide at least 2 crate names separated by commas.".to_string();
+                    let result = ComparisonOutput {
+                        crates: names.iter().map(|name| (*name).to_string()).collect(),
+                        message: Some(message.clone()),
+                        metrics: Vec::new(),
+                    };
+                    return structured(message, &result);
                 }
                 if names.len() > 5 {
-                    return Ok(CallToolResult::text(
-                        "Please provide at most 5 crate names to compare.",
-                    ));
+                    let message = "Please provide at most 5 crate names to compare.".to_string();
+                    let result = ComparisonOutput {
+                        crates: names.iter().map(|name| (*name).to_string()).collect(),
+                        message: Some(message.clone()),
+                        metrics: Vec::new(),
+                    };
+                    return structured(message, &result);
                 }
 
                 let mut output = format!("# Crate Comparison: {}\n\n", names.join(" vs "));
@@ -153,7 +178,23 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     output.push('\n');
                 }
 
-                Ok(CallToolResult::text(output))
+                let metrics = rows
+                    .iter()
+                    .map(|(label, values)| ComparisonMetric {
+                        metric: (*label).to_string(),
+                        values: names
+                            .iter()
+                            .zip(values.iter())
+                            .map(|(name, value)| ((*name).to_string(), value.clone()))
+                            .collect(),
+                    })
+                    .collect();
+                let result = ComparisonOutput {
+                    crates: names.iter().map(|name| (*name).to_string()).collect(),
+                    message: None,
+                    metrics,
+                };
+                structured(output, &result)
             },
         )
         .build()
@@ -163,8 +204,6 @@ pub fn build(state: Arc<AppState>) -> Tool {
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
-
-    use tokio::sync::RwLock;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -192,7 +231,6 @@ mod tests {
             )
             .unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 

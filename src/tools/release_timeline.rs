@@ -4,13 +4,15 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
+use crate::client::Version;
 use crate::state::AppState;
+use crate::tools::output::{schema, structured};
 
 /// Input for the release timeline tool
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -25,6 +27,21 @@ pub struct ReleaseTimelineInput {
     include_yanked: Option<bool>,
 }
 
+/// Versions and derived change metrics in a release timeline window.
+#[derive(Debug, Serialize, JsonSchema)]
+struct ReleaseTimelineOutput {
+    name: String,
+    include_yanked: bool,
+    versions: Vec<Version>,
+    yanked_versions: u64,
+    msrv_changes: u64,
+    feature_changes: u64,
+    average_cadence_days: Option<f64>,
+    span_start: Option<String>,
+    span_end: Option<String>,
+    api_calls: u64,
+}
+
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_release_timeline")
         .title("Get Release Timeline")
@@ -33,8 +50,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
              changes, MSRV bumps, license changes, yanked status, and release cadence. \
              Uses a single crates.io API call on the happy path.",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<ReleaseTimelineOutput>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -59,9 +76,20 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     .collect();
 
                 if window.is_empty() {
-                    return Ok(CallToolResult::text(format!(
-                        "No versions found for `{name}`."
-                    )));
+                    let output = format!("No versions found for `{name}`.");
+                    let result = ReleaseTimelineOutput {
+                        name,
+                        include_yanked,
+                        versions: Vec::new(),
+                        yanked_versions: 0,
+                        msrv_changes: 0,
+                        feature_changes: 0,
+                        average_cadence_days: None,
+                        span_start: None,
+                        span_end: None,
+                        api_calls: 1,
+                    };
+                    return structured(output, &result);
                 }
 
                 // If all embedded versions have empty features, fall back to per-version calls
@@ -113,7 +141,21 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     out.push_str("## Summary\n");
                     out.push_str("- Versions compared: 1\n");
                     out.push_str(&format!("- API calls made: {api_calls}\n"));
-                    return Ok(CallToolResult::text(out));
+                    let release_date = v.created_at.date_naive().to_string();
+                    let is_yanked = v.yanked;
+                    let result = ReleaseTimelineOutput {
+                        name,
+                        include_yanked,
+                        yanked_versions: u64::from(is_yanked),
+                        versions,
+                        msrv_changes: 0,
+                        feature_changes: 0,
+                        average_cadence_days: None,
+                        span_start: Some(release_date.clone()),
+                        span_end: Some(release_date),
+                        api_calls: api_calls as u64,
+                    };
+                    return structured(out, &result);
                 }
 
                 let total = versions.len();
@@ -229,12 +271,15 @@ pub fn build(state: Arc<AppState>) -> Tool {
                 let newest = versions.first().unwrap();
                 let span_start = oldest.created_at.date_naive();
                 let span_end = newest.created_at.date_naive();
-                let avg_cadence = if cadence_days.is_empty() {
-                    "n/a".to_string()
+                let average_cadence_days = if cadence_days.is_empty() {
+                    None
                 } else {
                     let sum: i64 = cadence_days.iter().sum();
-                    format!("~{:.1} days", sum as f64 / cadence_days.len() as f64)
+                    Some(sum as f64 / cadence_days.len() as f64)
                 };
+                let avg_cadence = average_cadence_days
+                    .map(|days| format!("~{days:.1} days"))
+                    .unwrap_or_else(|| "n/a".to_string());
 
                 out.push_str("## Summary\n");
                 out.push_str(&format!(
@@ -250,7 +295,19 @@ pub fn build(state: Arc<AppState>) -> Tool {
                 ));
                 out.push_str(&format!("- API calls made: {api_calls}\n"));
 
-                Ok(CallToolResult::text(out))
+                let result = ReleaseTimelineOutput {
+                    name,
+                    include_yanked,
+                    versions,
+                    yanked_versions: yanked_count as u64,
+                    msrv_changes: msrv_change_count as u64,
+                    feature_changes: feature_change_count as u64,
+                    average_cadence_days,
+                    span_start: Some(span_start.to_string()),
+                    span_end: Some(span_end.to_string()),
+                    api_calls: api_calls as u64,
+                };
+                structured(out, &result)
             },
         )
         .build()
@@ -260,8 +317,6 @@ pub fn build(state: Arc<AppState>) -> Tool {
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
-
-    use tokio::sync::RwLock;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -289,7 +344,6 @@ mod tests {
             )
             .unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 

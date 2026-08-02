@@ -19,6 +19,7 @@ pub mod health_check;
 pub mod info;
 pub mod keyword_detail;
 pub mod keywords;
+pub(crate) mod output;
 pub mod owners;
 pub mod readme;
 pub mod release_timeline;

@@ -3,14 +3,15 @@
 use std::sync::Arc;
 
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
 use crate::client::osv::OsvVulnerability;
 use crate::state::AppState;
+use crate::tools::output::{schema, structured};
 
 /// Input for auditing dependencies
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -26,9 +27,19 @@ pub struct AuditInput {
 }
 
 /// A vulnerability finding associated with a dependency.
+#[derive(Debug, Serialize, JsonSchema)]
 struct Finding {
     dep_name: String,
     vuln: OsvVulnerability,
+}
+
+/// Security findings for a crate and the dependencies that were checked.
+#[derive(Debug, Serialize, JsonSchema)]
+struct AuditOutput {
+    name: String,
+    version: String,
+    dependencies_checked: u64,
+    findings: Vec<Finding>,
 }
 
 fn format_findings(
@@ -117,8 +128,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
             "Check a crate's dependencies against the OSV.dev vulnerability database \
              (RustSec + GHSA + NVD). Returns known vulnerabilities for each dependency.",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<AuditOutput>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -186,7 +197,13 @@ pub fn build(state: Arc<AppState>) -> Tool {
                 }
 
                 let output = format_findings(&input.name, version, &findings, deps_checked);
-                Ok(CallToolResult::text(output))
+                let result = AuditOutput {
+                    name: input.name,
+                    version: version.to_string(),
+                    dependencies_checked: deps_checked as u64,
+                    findings,
+                };
+                structured(output, &result)
             },
         )
         .build()
@@ -196,8 +213,6 @@ pub fn build(state: Arc<AppState>) -> Tool {
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
-
-    use tokio::sync::RwLock;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -220,7 +235,6 @@ mod tests {
                 .unwrap(),
             osv_client: OsvClient::with_base_url("test", Duration::from_secs(30), osv_url).unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 

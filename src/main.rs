@@ -6,7 +6,8 @@ use cratesio_mcp::{prompts, resources, state::AppState, tools};
 use tower::ServiceBuilder;
 use tower::timeout::TimeoutLayer;
 use tower_mcp::protocol::{
-    CallToolParams, CompleteParams, CompleteResult, Completion, CompletionReference, McpRequest,
+    CacheScope, CallToolParams, CompleteParams, CompleteResult, Completion, CompletionReference,
+    DeprecationInfo, McpRequest,
 };
 use tower_mcp::router::{RouterRequest, RouterResponse};
 use tower_mcp::{HttpTransport, McpRouter, McpTracingLayer, StdioTransport};
@@ -238,6 +239,19 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
     let mut router = McpRouter::new()
         .server_info("cratesio-mcp", env!("CARGO_PKG_VERSION"))
         .instructions(instructions)
+        // The tool/resource/prompt definitions are static for the process lifetime.
+        // Final-protocol clients can safely reuse their discovery responses.
+        .list_ttl(3_600_000)
+        .cache_scope(CacheScope::Public)
+        .logging_deprecated(DeprecationInfo {
+            since: Some("2026-07-28".to_string()),
+            message: Some(
+                "MCP logging is deprecated; use stderr or OpenTelemetry-compatible tracing."
+                    .to_string(),
+            ),
+            remove_in: None,
+            replacement: Some("stderr or OpenTelemetry".to_string()),
+        })
         .tool(search_tool)
         .tool(info_tool)
         .tool(versions_tool)
@@ -273,7 +287,6 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
     // See: https://github.com/anthropics/claude-code/issues/2682
     if !args.minimal {
         // Build resources
-        let recent_searches = resources::recent_searches::build(state.clone());
         let crate_info_template = resources::crate_info::build(state.clone());
         let readme_template = resources::readme::build(state.clone());
         let docs_template = resources::docs::build(state.clone());
@@ -324,7 +337,6 @@ async fn main() -> Result<(), tower_mcp::BoxError> {
         ];
 
         router = router
-            .resource(recent_searches)
             .resource_template(crate_info_template)
             .resource_template(readme_template)
             .resource_template(docs_template)

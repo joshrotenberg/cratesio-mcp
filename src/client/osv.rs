@@ -5,6 +5,8 @@
 
 use std::time::Duration;
 
+#[cfg(feature = "mcp")]
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 // ── Error ──────────────────────────────────────────────────────────────────
@@ -24,13 +26,15 @@ pub enum OsvError {
 // ── Response types ─────────────────────────────────────────────────────────
 
 /// Top-level response from `POST /v1/query`.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct OsvQueryResponse {
     pub vulns: Option<Vec<OsvVulnerability>>,
 }
 
 /// A single vulnerability record.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct OsvVulnerability {
     /// Advisory ID (e.g. "RUSTSEC-2021-0078", "GHSA-...").
     pub id: String,
@@ -42,7 +46,8 @@ pub struct OsvVulnerability {
 }
 
 /// CVSS severity information.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct OsvSeverity {
     /// Severity scheme (e.g. "CVSS_V3", "CVSS_V4").
     #[serde(rename = "type")]
@@ -52,21 +57,24 @@ pub struct OsvSeverity {
 }
 
 /// Affected package and version range info.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct OsvAffected {
     pub package: Option<OsvPackage>,
     pub ranges: Option<Vec<OsvRange>>,
 }
 
 /// Package identifier within an ecosystem.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct OsvPackage {
     pub name: String,
     pub ecosystem: String,
 }
 
 /// A version range that is affected.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct OsvRange {
     #[serde(rename = "type")]
     pub range_type: String,
@@ -74,14 +82,16 @@ pub struct OsvRange {
 }
 
 /// A version event (introduced/fixed boundary).
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct OsvEvent {
     pub introduced: Option<String>,
     pub fixed: Option<String>,
 }
 
 /// A reference link (advisory URL, etc).
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct OsvReference {
     #[serde(rename = "type")]
     pub ref_type: String,

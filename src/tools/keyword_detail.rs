@@ -5,11 +5,13 @@ use std::sync::Arc;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
+use crate::client::Keyword;
 use crate::state::AppState;
+use crate::tools::output::{schema, structured};
 
 /// Input for getting a keyword
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -25,8 +27,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
             "Get details about a specific crates.io keyword, \
              including the number of crates using it.",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<Keyword>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -44,7 +46,7 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     kw.keyword, kw.crates_cnt, kw.keyword
                 );
 
-                Ok(CallToolResult::text(output))
+                structured(output, &kw)
             },
         )
         .build()
@@ -54,8 +56,6 @@ pub fn build(state: Arc<AppState>) -> Tool {
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
-
-    use tokio::sync::RwLock;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -83,7 +83,6 @@ mod tests {
             )
             .unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 

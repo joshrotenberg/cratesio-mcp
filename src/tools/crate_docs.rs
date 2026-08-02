@@ -5,12 +5,13 @@ use std::sync::Arc;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
 use crate::docs::format;
 use crate::state::AppState;
+use crate::tools::output::{DocumentOutput, schema, structured};
 
 /// Input for browsing crate documentation
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -37,7 +38,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
              in a module with brief descriptions. Use module_path to \
              navigate into sub-modules.",
         )
-        .read_only()
+        .read_only_safe()
+        .output_schema(schema::<DocumentOutput>())
         .extractor_handler(
             state,
             |State(state): State<Arc<AppState>>, Json(input): Json<GetCrateDocsInput>| async move {
@@ -59,7 +61,13 @@ pub fn build(state: Arc<AppState>) -> Tool {
                 };
 
                 let output = format::format_module_listing(&krate, &module_id);
-                Ok(CallToolResult::text(output))
+                let result = DocumentOutput {
+                    name: input.name,
+                    version: input.version,
+                    path: input.module_path,
+                    content: Some(output.clone()),
+                };
+                structured(output, &result)
             },
         )
         .build()

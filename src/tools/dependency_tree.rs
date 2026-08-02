@@ -4,14 +4,15 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
 use crate::client::types::Dependency;
 use crate::state::AppState;
+use crate::tools::output::{schema, structured};
 
 /// Input for getting a dependency tree
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -26,6 +27,7 @@ pub struct DependencyTreeInput {
 }
 
 /// A node in the dependency tree used during BFS traversal.
+#[derive(Debug, Serialize, JsonSchema)]
 struct TreeNode {
     name: String,
     version: String,
@@ -33,6 +35,7 @@ struct TreeNode {
 }
 
 /// A child reference in the formatted tree.
+#[derive(Debug, Serialize, JsonSchema)]
 struct TreeChild {
     name: String,
     req: String,
@@ -47,6 +50,19 @@ struct TreeChild {
 struct ResolvedCrate {
     version: String,
     deps: Vec<Dependency>,
+}
+
+/// Machine-readable dependency graph and traversal statistics.
+#[derive(Debug, Serialize, JsonSchema)]
+struct DependencyTreeOutput {
+    root_node: usize,
+    requested_depth: u32,
+    nodes: Vec<TreeNode>,
+    direct_dependencies: u64,
+    unique_crates: u64,
+    tree_depth: u32,
+    api_calls: u64,
+    truncated: bool,
 }
 
 const MAX_UNIQUE_CRATES: usize = 50;
@@ -109,8 +125,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
              dependencies to a configurable depth. Shows the complete dependency footprint \
              with version requirements and deduplication markers.",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<DependencyTreeOutput>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -394,7 +410,17 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     ));
                 }
 
-                Ok(CallToolResult::text(output))
+                let result = DependencyTreeOutput {
+                    root_node: root_idx,
+                    requested_depth: max_depth,
+                    nodes,
+                    direct_dependencies: direct_deps as u64,
+                    unique_crates: unique_crates as u64,
+                    tree_depth,
+                    api_calls: api_calls as u64,
+                    truncated,
+                };
+                structured(output, &result)
             },
         )
         .build()
@@ -404,8 +430,6 @@ pub fn build(state: Arc<AppState>) -> Tool {
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
-
-    use tokio::sync::RwLock;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -428,7 +452,6 @@ mod tests {
                 .unwrap(),
             osv_client: OsvClient::new("test", Duration::from_secs(30)).unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 

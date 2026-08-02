@@ -6,11 +6,13 @@ use std::sync::Arc;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
+use crate::client::CrateDownloads;
 use crate::state::{AppState, format_number};
+use crate::tools::output::{schema, structured};
 
 /// Input for getting downloads data
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -26,8 +28,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
             "Get download statistics for a crate including total downloads \
              and recent download trends.",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<CrateDownloads>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -69,7 +71,7 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     output.push_str(&format!("- v{}: {}\n", name, format_number(**downloads)));
                 }
 
-                Ok(CallToolResult::text(output))
+                structured(output, &response)
             },
         )
         .build()
@@ -79,8 +81,6 @@ pub fn build(state: Arc<AppState>) -> Tool {
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
-
-    use tokio::sync::RwLock;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -108,7 +108,6 @@ mod tests {
             )
             .unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 

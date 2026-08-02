@@ -3,14 +3,15 @@
 use std::sync::Arc;
 
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
-use crate::client::{CratesQuery, Sort};
+use crate::client::{Crate, CratesQuery, Sort};
 use crate::state::{AppState, format_number};
+use crate::tools::output::{schema, structured};
 
 /// Input for finding alternative crates
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -20,6 +21,15 @@ pub struct FindAlternativesInput {
     /// Maximum number of alternatives to return (default: 5)
     #[serde(default = "default_max_results")]
     max_results: usize,
+}
+
+/// Target crate, search terms, and discovered alternative crates.
+#[derive(Debug, Serialize, JsonSchema)]
+struct AlternativesOutput {
+    target: Crate,
+    keywords: Vec<String>,
+    alternatives: Vec<Crate>,
+    message: Option<String>,
 }
 
 fn default_max_results() -> usize {
@@ -34,8 +44,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
              to search for related crates, then returns a comparison table showing downloads, \
              recent activity, and descriptions.",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<AlternativesOutput>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -60,10 +70,17 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     .collect();
 
                 if keywords.is_empty() {
-                    return Ok(CallToolResult::text(format!(
+                    let message = format!(
                         "No keywords found for '{}'. Cannot search for alternatives.",
                         input.name
-                    )));
+                    );
+                    let result = AlternativesOutput {
+                        target: crate_data.clone(),
+                        keywords,
+                        alternatives: Vec::new(),
+                        message: Some(message.clone()),
+                    };
+                    return structured(message, &result);
                 }
 
                 let search_term = keywords.join(" ");
@@ -90,10 +107,17 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     .collect();
 
                 if candidates.is_empty() {
-                    return Ok(CallToolResult::text(format!(
+                    let message = format!(
                         "No alternatives found for '{}' using keywords: {}",
                         input.name, search_term
-                    )));
+                    );
+                    let result = AlternativesOutput {
+                        target: crate_data.clone(),
+                        keywords,
+                        alternatives: Vec::new(),
+                        message: Some(message.clone()),
+                    };
+                    return structured(message, &result);
                 }
 
                 // 5. Format output as markdown comparison table
@@ -142,10 +166,12 @@ pub fn build(state: Arc<AppState>) -> Tool {
                 ));
 
                 // 5. Get basic info for each alternative and add to table
+                let mut alternatives = Vec::with_capacity(candidates.len());
                 for candidate in &candidates {
                     match state.client.get_crate(&candidate.name).await {
                         Ok(alt) => {
                             let c = &alt.crate_data;
+                            alternatives.push(c.clone());
                             output.push_str(&format!(
                                 "| {} | {} | {} | {} | {} | {} |\n",
                                 c.name,
@@ -165,6 +191,7 @@ pub fn build(state: Arc<AppState>) -> Tool {
                             ));
                         }
                         Err(_) => {
+                            alternatives.push((*candidate).clone());
                             // Fall back to search result data if detailed fetch fails
                             output.push_str(&format!(
                                 "| {} | {} | {} | {} | {} | - |\n",
@@ -188,7 +215,13 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     }
                 }
 
-                Ok(CallToolResult::text(output))
+                let result = AlternativesOutput {
+                    target: crate_data.clone(),
+                    keywords,
+                    alternatives,
+                    message: None,
+                };
+                structured(output, &result)
             },
         )
         .build()
@@ -198,8 +231,6 @@ pub fn build(state: Arc<AppState>) -> Tool {
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
-
-    use tokio::sync::RwLock;
     use wiremock::matchers::{method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -223,7 +254,6 @@ mod tests {
                 .unwrap(),
             osv_client: OsvClient::with_base_url("test", Duration::from_secs(30), osv_url).unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 

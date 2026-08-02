@@ -3,12 +3,15 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
+#[cfg(feature = "mcp")]
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 // ── Core types ──────────────────────────────────────────────────────────────
 
 /// Crate metadata from the crates.io API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct Crate {
     pub name: String,
     #[serde(default)]
@@ -36,6 +39,7 @@ pub struct Crate {
 
 /// Version metadata from the crates.io API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct Version {
     #[serde(default)]
     pub id: u64,
@@ -55,6 +59,7 @@ pub struct Version {
 
 /// Per-version download data point.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct VersionDownloads {
     pub version: u64,
     pub downloads: u64,
@@ -64,6 +69,7 @@ pub struct VersionDownloads {
 
 /// User or team on crates.io.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct User {
     pub id: u64,
     pub login: String,
@@ -79,6 +85,7 @@ pub struct User {
 
 /// Dependency of a crate version.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct Dependency {
     pub crate_id: String,
     pub req: String,
@@ -92,6 +99,7 @@ pub struct Dependency {
 
 /// A keyword from crates.io.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct Keyword {
     pub keyword: String,
     #[serde(default)]
@@ -100,6 +108,7 @@ pub struct Keyword {
 
 /// A category from crates.io.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct Category {
     pub category: String,
     #[serde(default)]
@@ -112,25 +121,29 @@ pub struct Category {
 
 /// Pagination metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct Meta {
     pub total: u64,
 }
 
 /// Authors listed in a crate version's Cargo.toml.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct Authors {
     pub names: Vec<String>,
 }
 
 /// A reverse dependency entry (a crate that depends on the queried crate).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct ReverseDependency {
     pub crate_version: CrateVersion,
     pub dependency: Dependency,
 }
 
 /// Identifies a specific version of a crate.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct CrateVersion {
     pub crate_name: String,
     pub num: String,
@@ -140,6 +153,7 @@ pub struct CrateVersion {
 
 /// Response from `GET /crates/{name}`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct CrateResponse {
     #[serde(rename = "crate")]
     pub crate_data: Crate,
@@ -148,6 +162,7 @@ pub struct CrateResponse {
 
 /// Response from `GET /crates` (search).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct CratesPage {
     pub crates: Vec<Crate>,
     pub meta: Meta,
@@ -155,6 +170,7 @@ pub struct CratesPage {
 
 /// Response from `GET /crates/{name}/downloads`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct CrateDownloads {
     pub version_downloads: Vec<VersionDownloads>,
     #[serde(default)]
@@ -162,7 +178,8 @@ pub struct CrateDownloads {
 }
 
 /// Reverse dependencies with pagination metadata.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct ReverseDependencies {
     pub dependencies: Vec<ReverseDependency>,
     pub meta: Meta,
@@ -170,6 +187,7 @@ pub struct ReverseDependencies {
 
 /// Summary statistics from crates.io.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct Summary {
     pub num_crates: u64,
     pub num_downloads: u64,
@@ -182,6 +200,7 @@ pub struct Summary {
 
 /// Paginated versions response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct VersionsPage {
     pub versions: Vec<Version>,
     pub meta: Meta,
@@ -189,6 +208,7 @@ pub struct VersionsPage {
 
 /// Paginated categories response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct CategoriesPage {
     pub categories: Vec<Category>,
     pub meta: Meta,
@@ -196,6 +216,7 @@ pub struct CategoriesPage {
 
 /// Paginated keywords response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct KeywordsPage {
     pub keywords: Vec<Keyword>,
     pub meta: Meta,
@@ -205,6 +226,7 @@ pub struct KeywordsPage {
 
 /// A crates.io team.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct Team {
     pub login: String,
     #[serde(default)]
@@ -219,6 +241,7 @@ pub struct Team {
 
 /// Download statistics for a user.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct UserStats {
     pub total_downloads: u64,
 }
@@ -227,6 +250,7 @@ pub struct UserStats {
 
 /// A minimal category entry from the category_slugs endpoint.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct CategorySlug {
     pub id: String,
     pub slug: String,
@@ -238,6 +262,7 @@ pub struct CategorySlug {
 
 /// Site deployment metadata from crates.io.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(JsonSchema))]
 pub struct SiteMetadata {
     pub deployed_sha: Option<String>,
     #[serde(default)]

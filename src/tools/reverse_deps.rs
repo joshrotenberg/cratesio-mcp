@@ -6,11 +6,15 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use tower_mcp::protocol::{LogLevel, LoggingMessageParams};
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Context, Json, State},
 };
 
 use crate::state::AppState;
+use crate::{
+    client::ReverseDependencies,
+    tools::output::{schema, structured},
+};
 
 /// Input for getting reverse dependencies
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -26,8 +30,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
             "Get crates that depend on the specified crate (reverse dependencies). \
              Useful for understanding a crate's ecosystem impact.",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<ReverseDependencies>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -89,7 +93,7 @@ pub fn build(state: Arc<AppState>) -> Tool {
                 // Complete progress
                 ctx.report_progress(1.0, Some(1.0), Some("Done")).await;
 
-                Ok(CallToolResult::text(output))
+                structured(output, &response)
             },
         )
         .build()
@@ -99,8 +103,6 @@ pub fn build(state: Arc<AppState>) -> Tool {
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
-
-    use tokio::sync::RwLock;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -128,7 +130,6 @@ mod tests {
             )
             .unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 

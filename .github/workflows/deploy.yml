@@ -69,6 +69,27 @@ jobs:
           for attempt in $(seq 1 $MAX_RETRIES); do
             echo "=== Attempt $attempt of $MAX_RETRIES ==="
 
+            echo "Sending 2026-07-28 server/discover request..."
+            DISCOVER_RESPONSE=$(curl -s -X POST https://cratesio-mcp.fly.dev/ \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json" \
+              -H "MCP-Protocol-Version: 2026-07-28" \
+              -H "Mcp-Method: server/discover" \
+              -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"deploy-check","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}')
+
+            echo "Discover response: $DISCOVER_RESPONSE"
+
+            if ! echo "$DISCOVER_RESPONSE" | grep -q '"supportedVersions"' || \
+               ! echo "$DISCOVER_RESPONSE" | grep -q '"2026-07-28"'; then
+              echo "2026-07-28 protocol verification failed"
+              if [ $attempt -lt $MAX_RETRIES ]; then
+                echo "Retrying in ${RETRY_DELAY}s..."
+                sleep $RETRY_DELAY
+                continue
+              fi
+              exit 1
+            fi
+
             echo "Sending initialize request..."
             INIT_RESPONSE=$(curl -s -D /tmp/headers.txt -X POST https://cratesio-mcp.fly.dev/ \
               -H "Content-Type: application/json" \

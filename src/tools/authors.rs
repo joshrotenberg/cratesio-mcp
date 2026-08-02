@@ -5,11 +5,13 @@ use std::sync::Arc;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
+use crate::client::Authors;
 use crate::state::AppState;
+use crate::tools::output::{schema, structured};
 
 /// Input for getting crate authors
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -28,8 +30,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
             "Get the authors of a specific crate version. Authors are the people \
              listed in the Cargo.toml [package].authors field.",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<Authors>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -63,7 +65,7 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     }
                 }
 
-                Ok(CallToolResult::text(output))
+                structured(output, &authors)
             },
         )
         .build()
@@ -73,8 +75,6 @@ pub fn build(state: Arc<AppState>) -> Tool {
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
-
-    use tokio::sync::RwLock;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -102,7 +102,6 @@ mod tests {
             )
             .unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 

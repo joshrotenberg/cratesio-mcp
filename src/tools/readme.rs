@@ -5,11 +5,12 @@ use std::sync::Arc;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
 use crate::state::AppState;
+use crate::tools::output::{DocumentOutput, schema, structured};
 
 /// Input for getting a crate's README
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -28,8 +29,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
             "Get the README content for a crate version. Returns the rendered README \
              from the crate's published package. Defaults to the latest version.",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<DocumentOutput>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -53,17 +54,28 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     .await
                     .tool_context("Crates.io API error")?;
 
-                if readme.trim().is_empty() {
-                    Ok(CallToolResult::text(format!(
-                        "No README found for {} v{}",
-                        input.name, version
-                    )))
+                let content = if readme.trim().is_empty() {
+                    None
                 } else {
-                    Ok(CallToolResult::text(format!(
+                    Some(readme)
+                };
+                let output = if content.is_none() {
+                    format!("No README found for {} v{}", input.name, version)
+                } else {
+                    format!(
                         "# {} v{} - README\n\n{}",
-                        input.name, version, readme
-                    )))
-                }
+                        input.name,
+                        version,
+                        content.as_deref().unwrap_or_default()
+                    )
+                };
+                let result = DocumentOutput {
+                    name: input.name,
+                    version,
+                    path: None,
+                    content,
+                };
+                structured(output, &result)
             },
         )
         .build()
@@ -73,8 +85,6 @@ pub fn build(state: Arc<AppState>) -> Tool {
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
-
-    use tokio::sync::RwLock;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -102,7 +112,6 @@ mod tests {
             )
             .unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 

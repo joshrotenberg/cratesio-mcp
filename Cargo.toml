@@ -38,7 +38,7 @@ mcp = [
 
 [dependencies]
 # Core MCP (server only)
-tower-mcp = { version = "0.13", features = ["http", "testing"], optional = true }
+tower-mcp = { version = "0.17.1", features = ["http", "protocol-2026-07-28", "testing"], optional = true }
 # HTTP server types, for the client-IP request-logging middleware on the HTTP transport
 axum = { version = "0.8", optional = true }
 
@@ -59,8 +59,8 @@ clap = { version = "4", features = ["derive"], optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# Schema generation (MCP tool input schemas)
-schemars = { version = "1", optional = true }
+# Schema generation (MCP tool input and output schemas)
+schemars = { version = "1", features = ["chrono04"], optional = true }
 
 # Tracing
 tracing = "0.1"
@@ -72,6 +72,7 @@ tower = { version = "0.5", features = ["util", "timeout", "limit"], optional = t
 tower-resilience = { version = "0.7.1", default-features = false, features = ["bulkhead", "ratelimiter", "cache"], optional = true }
 
 [dev-dependencies]
+jsonschema = { version = "0.49", default-features = false }
 wiremock = "0.6"
 
 # The profile that 'dist' will build with

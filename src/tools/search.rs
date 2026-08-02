@@ -6,11 +6,13 @@ use crate::client::{CratesQuery, Sort};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
-use crate::state::{AppState, CrateSummary, format_number};
+use crate::client::CratesPage;
+use crate::state::{AppState, format_number};
+use crate::tools::output::{schema, structured};
 
 /// Input for searching crates
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -43,8 +45,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
             "Search for Rust crates on crates.io. Returns crate names, descriptions, \
              download counts, and repository links.",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<CratesPage>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -60,19 +62,6 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     .crates(query)
                     .await
                     .tool_context("Crates.io API error")?;
-
-                // Save search for resources
-                let summaries: Vec<_> = response
-                    .crates
-                    .iter()
-                    .map(|c| CrateSummary {
-                        name: c.name.clone(),
-                        description: c.description.clone(),
-                        max_version: c.max_version.clone(),
-                        downloads: c.downloads,
-                    })
-                    .collect();
-                state.save_search(input.query.clone(), summaries).await;
 
                 // Format results
                 let mut output = format!(
@@ -98,7 +87,7 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     output.push('\n');
                 }
 
-                Ok(CallToolResult::text(output))
+                structured(output, &response)
             },
         )
         .build()
@@ -108,8 +97,6 @@ pub fn build(state: Arc<AppState>) -> Tool {
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
-
-    use tokio::sync::RwLock;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -137,7 +124,6 @@ mod tests {
             )
             .unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 

@@ -126,14 +126,17 @@ Add to `claude_desktop_config.json`:
 | `get_crate_changelog` | Changelog content from a crate's GitHub repository, optionally filtered to a version |
 | `get_release_timeline` | Version-over-version registry-metadata diff: feature changes, MSRV bumps, yanked status, release cadence |
 
-### Resources (4)
+Every successful tool call returns both the existing human-readable Markdown in
+`content` and typed JSON in `structuredContent`. Each tool advertises the
+matching JSON Schema 2020-12 contract through `outputSchema` during discovery.
+
+### Resources (3)
 
 | Resource | Description |
 |----------|-------------|
 | `crates://{name}/info` | Crate metadata |
 | `crates://{name}/readme` | Crate README content |
 | `crates://{name}/docs` | Documentation structure |
-| Recent searches | Recent search queries and results |
 
 ### Prompts (6)
 
@@ -149,7 +152,8 @@ Add to `claude_desktop_config.json`:
 ## Transports
 
 - **stdio** (default): for Claude Desktop, Claude Code, and other MCP clients
-- **HTTP/SSE**: Streamable HTTP with server-sent events (MCP 2025-11-25 spec)
+- **Streamable HTTP**: sessionless MCP 2026-07-28 transport,
+  while retaining compatibility with session-based MCP 2025-11-25 clients
 
 ```bash
 # stdio (default)
@@ -160,6 +164,11 @@ cratesio-mcp --transport http --port 3000
 ```
 
 The HTTP transport includes a [tower](https://github.com/tower-rs/tower) middleware stack: timeout, rate limiting, bulkhead concurrency control, optional response caching, and structured tracing.
+
+The 2026-07-28 path supports `server/discover`, stateless requests, standardized
+MCP routing headers, and cache hints. Tool discovery marks every crates.io tool
+as read-only, non-destructive, and idempotent; resource reads advertise cache
+lifetimes appropriate to their data source.
 
 ## Built-in crates.io client
 

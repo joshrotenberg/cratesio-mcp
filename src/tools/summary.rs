@@ -3,11 +3,13 @@
 use std::sync::Arc;
 
 use tower_mcp::{
-    CallToolResult, NoParams, ResultExt, Tool, ToolBuilder,
+    NoParams, ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
+use crate::client::Summary;
 use crate::state::{AppState, format_number};
+use crate::tools::output::{schema, structured};
 
 pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_summary")
@@ -16,8 +18,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
             "Get crates.io summary statistics including total crates, downloads, \
              new crates, most downloaded, and recently updated crates.",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<Summary>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -74,7 +76,7 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     output.push_str(&format!("- {} ({} crates)\n", cat.category, cat.crates_cnt));
                 }
 
-                Ok(CallToolResult::text(output))
+                structured(output, &summary)
             },
         )
         .build()
@@ -84,8 +86,6 @@ pub fn build(state: Arc<AppState>) -> Tool {
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
-
-    use tokio::sync::RwLock;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -113,7 +113,6 @@ mod tests {
             )
             .unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 

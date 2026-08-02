@@ -5,11 +5,13 @@ use std::sync::Arc;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
+use crate::client::User;
 use crate::state::AppState;
+use crate::tools::output::{schema, structured};
 
 /// Input for getting user info
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -22,8 +24,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
     ToolBuilder::new("get_user")
         .title("Get User")
         .description("Get a crates.io user's profile information by their GitHub username.")
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<User>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -48,7 +50,7 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     output.push_str(&format!("**Avatar:** {}\n", avatar));
                 }
 
-                Ok(CallToolResult::text(output))
+                structured(output, &user)
             },
         )
         .build()
@@ -58,8 +60,6 @@ pub fn build(state: Arc<AppState>) -> Tool {
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
-
-    use tokio::sync::RwLock;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -87,7 +87,6 @@ mod tests {
             )
             .unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 

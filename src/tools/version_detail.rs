@@ -5,11 +5,13 @@ use std::sync::Arc;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
+use crate::client::Version;
 use crate::state::{AppState, format_number};
+use crate::tools::output::{schema, structured};
 
 /// Input for getting a specific version
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -27,8 +29,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
             "Get detailed metadata for a specific crate version including \
              license, MSRV, download count, and yanked status.",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<Version>())
         .icon("https://crates.io/assets/cargo.png")
         .extractor_handler(
             state,
@@ -55,7 +57,7 @@ pub fn build(state: Arc<AppState>) -> Tool {
                     output.push_str(&format!("- **MSRV:** {}\n", msrv));
                 }
 
-                Ok(CallToolResult::text(output))
+                structured(output, &v)
             },
         )
         .build()
@@ -65,8 +67,6 @@ pub fn build(state: Arc<AppState>) -> Tool {
 mod tests {
     use std::sync::Arc;
     use std::time::Duration;
-
-    use tokio::sync::RwLock;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -94,7 +94,6 @@ mod tests {
             )
             .unwrap(),
             docs_cache: DocsCache::new(10, Duration::from_secs(3600)),
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 

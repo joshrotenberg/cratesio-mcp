@@ -5,12 +5,13 @@ use std::sync::Arc;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use tower_mcp::{
-    CallToolResult, ResultExt, Tool, ToolBuilder,
+    ResultExt, Tool, ToolBuilder,
     extract::{Json, State},
 };
 
 use crate::docs::format;
 use crate::state::AppState;
+use crate::tools::output::{DocSearchMatch, SearchDocsOutput, schema, structured};
 
 /// Input for searching crate documentation
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -43,8 +44,8 @@ pub fn build(state: Arc<AppState>) -> Tool {
              Returns matching functions, structs, traits, etc. with their paths \
              and brief descriptions. Case-insensitive substring match.",
         )
-        .read_only()
-        .idempotent()
+        .read_only_safe()
+        .output_schema(schema::<SearchDocsOutput>())
         .extractor_handler(
             state,
             |State(state): State<Arc<AppState>>, Json(input): Json<SearchDocsInput>| async move {
@@ -93,11 +94,36 @@ pub fn build(state: Arc<AppState>) -> Tool {
                 let total = matches.len();
                 matches.truncate(limit);
 
+                let structured_matches = matches
+                    .iter()
+                    .map(|(id, item)| DocSearchMatch {
+                        name: item.name.clone().unwrap_or_else(|| "_".to_string()),
+                        path: format::item_path(&krate, id),
+                        kind: format::item_kind_label(&item.inner).to_string(),
+                        summary: item
+                            .docs
+                            .as_deref()
+                            .map(format::first_sentence)
+                            .unwrap_or_default(),
+                    })
+                    .collect();
+
+                let result = SearchDocsOutput {
+                    name: input.name.clone(),
+                    version: input.version.clone(),
+                    query: input.query.clone(),
+                    total: total as u64,
+                    matches: structured_matches,
+                };
+
                 if matches.is_empty() {
-                    return Ok(CallToolResult::text(format!(
-                        "No items matching '{}' found in {} v{}.",
-                        input.query, input.name, input.version
-                    )));
+                    return structured(
+                        format!(
+                            "No items matching '{}' found in {} v{}.",
+                            input.query, input.name, input.version
+                        ),
+                        &result,
+                    );
                 }
 
                 let mut output = format!(
@@ -110,7 +136,7 @@ pub fn build(state: Arc<AppState>) -> Tool {
                 );
                 output.push_str(&format::format_search_results(&krate, &matches));
 
-                Ok(CallToolResult::text(output))
+                structured(output, &result)
             },
         )
         .build()

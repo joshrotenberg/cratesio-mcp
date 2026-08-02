@@ -6,17 +6,6 @@ use crate::client::CratesIoClient;
 use crate::client::docsrs::DocsRsClient;
 use crate::client::osv::OsvClient;
 use crate::docs::cache::DocsCache;
-use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
-
-/// Summary of a crate from search results (for resource storage)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CrateSummary {
-    pub name: String,
-    pub description: Option<String>,
-    pub max_version: String,
-    pub downloads: u64,
-}
 
 /// Shared state for the MCP server
 pub struct AppState {
@@ -28,8 +17,6 @@ pub struct AppState {
     pub osv_client: OsvClient,
     /// Cache for parsed rustdoc JSON
     pub docs_cache: DocsCache,
-    /// Recent search queries (exposed as a resource)
-    pub recent_searches: RwLock<Vec<(String, Vec<CrateSummary>)>>,
 }
 
 impl AppState {
@@ -60,7 +47,6 @@ impl AppState {
             docsrs_client,
             osv_client,
             docs_cache,
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 
@@ -96,7 +82,6 @@ impl AppState {
             docsrs_client,
             osv_client,
             docs_cache,
-            recent_searches: RwLock::new(Vec::new()),
         })
     }
 
@@ -128,18 +113,7 @@ impl AppState {
             docsrs_client,
             osv_client,
             docs_cache,
-            recent_searches: RwLock::new(Vec::new()),
         })
-    }
-
-    /// Save a search query and its results for the recent searches resource
-    pub async fn save_search(&self, query: String, results: Vec<CrateSummary>) {
-        let mut searches = self.recent_searches.write().await;
-        // Keep only last 10 searches
-        if searches.len() >= 10 {
-            searches.remove(0);
-        }
-        searches.push((query, results));
     }
 }
 
@@ -190,42 +164,5 @@ mod tests {
         assert_eq!(format_number(1_000_000), "1.0M");
         assert_eq!(format_number(2_500_000), "2.5M");
         assert_eq!(format_number(50_000_000_000), "50000.0M");
-    }
-
-    #[tokio::test]
-    async fn save_search_stores_entry() {
-        let state = AppState::with_base_url("http://unused").unwrap();
-
-        state
-            .save_search(
-                "tokio".to_string(),
-                vec![CrateSummary {
-                    name: "tokio".to_string(),
-                    description: Some("Async runtime".to_string()),
-                    max_version: "1.0.0".to_string(),
-                    downloads: 100,
-                }],
-            )
-            .await;
-
-        let searches = state.recent_searches.read().await;
-        assert_eq!(searches.len(), 1);
-        assert_eq!(searches[0].0, "tokio");
-        assert_eq!(searches[0].1[0].name, "tokio");
-    }
-
-    #[tokio::test]
-    async fn save_search_caps_at_10() {
-        let state = AppState::with_base_url("http://unused").unwrap();
-
-        for i in 0..12 {
-            state.save_search(format!("query-{i}"), Vec::new()).await;
-        }
-
-        let searches = state.recent_searches.read().await;
-        assert_eq!(searches.len(), 10);
-        // Oldest entries should have been evicted
-        assert_eq!(searches[0].0, "query-2");
-        assert_eq!(searches[9].0, "query-11");
     }
 }
