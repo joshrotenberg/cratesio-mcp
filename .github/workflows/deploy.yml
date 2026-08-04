@@ -70,6 +70,7 @@ jobs:
     env:
       MCP_ENDPOINT: https://cratesio-mcp.fly.dev/
       MCP_REPL_VERSION: "0.1.7"
+      MCP_TYPESCRIPT_CLIENT_VERSION: "2.0.0"
       EXPECTED_VERSION: ${{ github.event_name == 'push' && github.ref_name || '' }}
     steps:
       - name: Checkout
@@ -80,6 +81,11 @@ jobs:
 
       - name: Install mcp-repl
         run: cargo install mcp-repl --version "$MCP_REPL_VERSION" --locked
+
+      - name: Install official TypeScript MCP client
+        run: >-
+          npm install --no-save --no-package-lock --no-audit --no-fund
+          "@modelcontextprotocol/client@$MCP_TYPESCRIPT_CLIENT_VERSION"
 
       - name: Validate released server
         run: bash scripts/validate-release.sh

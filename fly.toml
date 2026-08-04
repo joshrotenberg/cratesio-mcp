@@ -27,7 +27,10 @@ primary_region = "sjc"
   min_machines_running = 1
   processes = ["app"]
   [http_service.concurrency]
-    type = "requests"
+    # Final-protocol subscriptions/listen responses remain open indefinitely.
+    # Use one backend connection per HTTP request so Fly Proxy cannot pool a
+    # follow-up request behind the long-lived SSE response (#157).
+    type = "connections"
     hard_limit = 35
     soft_limit = 25
 

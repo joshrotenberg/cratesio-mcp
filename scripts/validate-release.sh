@@ -5,6 +5,7 @@ endpoint="${MCP_ENDPOINT:-https://cratesio-mcp.fly.dev/}"
 repl="${MCP_REPL_BIN:-mcp-repl}"
 max_attempts="${MCP_VALIDATION_ATTEMPTS:-3}"
 retry_delay="${MCP_VALIDATION_RETRY_DELAY_SECS:-5}"
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 validate_tools() {
   local protocol="$1"
@@ -73,11 +74,19 @@ validate_tool_result() {
   }' <<<"$result_json"
 }
 
+validate_subscription_concurrency() {
+  if ! node "$script_dir/validate-subscription.mjs" "$endpoint"; then
+    echo "official client could not list tools with subscriptions/listen open" >&2
+    return 1
+  fi
+}
+
 for attempt in $(seq 1 "$max_attempts"); do
   echo "MCP release validation attempt $attempt/$max_attempts"
 
   if validate_tools stable \
     && validate_tools 2026-07-28 \
+    && validate_subscription_concurrency \
     && validate_tool_result; then
     echo "MCP release validation passed"
     exit 0
