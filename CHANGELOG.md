@@ -8,6 +8,10 @@ All notable changes to this project will be documented in this file.
 
 - Clear Fly Proxy connection saturation and probe the deployment ([#159](https://github.com/joshrotenberg/cratesio-mcp/pull/159))
 
+### Miscellaneous Tasks
+
+- Upgrade tower-mcp 0.17.1 -> 0.20.0 ([#159](https://github.com/joshrotenberg/cratesio-mcp/pull/159))
+
 
 
 ## [0.4.0] - 2026-08-02
