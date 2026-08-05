@@ -1,0 +1,107 @@
+name: Uptime
+
+# Probes the deployed server from outside Fly, on a schedule.
+#
+# The Fly-managed health check in fly.toml runs on the machine's private
+# network and bypasses Fly Proxy's concurrency accounting, so it cannot see a
+# proxy-level outage: during #158 it reported "passing" for hours while every
+# public request got PR01 "no known healthy instances". Only a probe that goes
+# through the public hostname observes what clients actually get.
+#
+# Cadence is the detection latency for that class of outage. Public-repo
+# Actions minutes are free, so this runs every 2 hours rather than daily.
+on:
+  schedule:
+    - cron: "0 */2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  probe:
+    name: Probe deployed MCP server
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.repository == 'joshrotenberg/cratesio-mcp'
+    env:
+      MCP_ENDPOINT: https://cratesio-mcp.fly.dev/
+      MCP_REPL_VERSION: "0.1.7"
+      MCP_TYPESCRIPT_CLIENT_VERSION: "2.0.0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Fast, dependency-free reachability check. Runs before the toolchain
+      # setup so a proxy-level outage fails in seconds with an obvious message
+      # instead of waiting on a cargo install that is irrelevant to the fault.
+      - name: Probe public health endpoint
+        run: |
+          status=$(curl -s -o /dev/null -m 15 -w '%{http_code}' \
+            "${MCP_ENDPOINT%/}/health" || echo "000")
+          echo "GET /health -> $status"
+          if [ "$status" != "200" ]; then
+            echo "::error::Public health endpoint returned $status (000 = timeout/refused)."
+            exit 1
+          fi
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install mcp-repl
+        run: cargo install mcp-repl --version "$MCP_REPL_VERSION" --locked
+
+      - name: Install official TypeScript MCP client
+        run: >-
+          npm install --no-save --no-package-lock --no-audit --no-fund
+          "@modelcontextprotocol/client@$MCP_TYPESCRIPT_CLIENT_VERSION"
+
+      # EXPECTED_VERSION is deliberately unset: this checks that the deployed
+      # server works, not that it matches any particular release tag.
+      - name: Validate deployed server
+        run: bash scripts/validate-release.sh
+
+      # One open issue per outage, not one per failed run.
+      - name: Open or update outage issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          existing=$(gh issue list --label uptime --state open \
+            --json number -q '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "Uptime probe failed again: $RUN_URL"
+            exit 0
+          fi
+          gh label create uptime --description "Automated uptime probe" \
+            --color B60205 2>/dev/null || true
+          gh issue create --label uptime \
+            --title "Deployed server failing uptime probe" \
+            --body "The scheduled uptime probe against \`$MCP_ENDPOINT\` failed.
+
+Run: $RUN_URL
+
+Check proxy-level reachability first. The Fly health check cannot detect
+connection-limit saturation (see #158), so \`fly status\` reporting a passing
+check does not rule it out:
+
+\`\`\`
+fly ssh console -a cratesio-mcp -C \"sh -c 'cat /proc/net/tcp'\" | awk 'NR>2 && \$4==\"01\" {n++} END {print n}'
+\`\`\`
+
+Compare that count against \`hard_limit\` in \`fly.toml\`."
+
+      - name: Close outage issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for n in $(gh issue list --label uptime --state open --json number -q '.[].number'); do
+            gh issue close "$n" --comment "Uptime probe passing again."
+          done
