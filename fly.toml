@@ -30,9 +30,19 @@ primary_region = "sjc"
     # Final-protocol subscriptions/listen responses remain open indefinitely.
     # Use one backend connection per HTTP request so Fly Proxy cannot pool a
     # follow-up request behind the long-lived SSE response (#157).
+    #
+    # These limits count OPEN CONNECTIONS, not in-flight requests, so idle
+    # keep-alive connections the proxy pools count against them. Real traffic
+    # holds ~35 pooled connections at steady state, so the previous 35/25 was
+    # at capacity permanently: the proxy had no routable candidate and served
+    # PR01 "no known healthy instances" for every request while the machine sat
+    # at load 0.00 (#158). The flyd health check runs on the private network and
+    # bypasses proxy concurrency accounting, so it kept reporting "passing"
+    # throughout. Idle connections cost a few KB each, so headroom is cheap;
+    # keep these an order of magnitude above observed steady-state concurrency.
     type = "connections"
-    hard_limit = 35
-    soft_limit = 25
+    hard_limit = 400
+    soft_limit = 300
 
   # Fly-managed HTTP health check on /health. A failing check makes a deploy
   # fail (instead of "succeeding" while the app serves nothing -- the gap that
