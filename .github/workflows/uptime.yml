@@ -42,8 +42,10 @@ jobs:
       # instead of waiting on a cargo install that is irrelevant to the fault.
       - name: Probe public health endpoint
         run: |
+          # curl already writes 000 for a timeout or refused connection, so
+          # this only needs to survive the non-zero exit, not substitute a code.
           status=$(curl -s -o /dev/null -m 15 -w '%{http_code}' \
-            "${MCP_ENDPOINT%/}/health" || echo "000")
+            "${MCP_ENDPOINT%/}/health" || true)
           echo "GET /health -> $status"
           if [ "$status" != "200" ]; then
             echo "::error::Public health endpoint returned $status (000 = timeout/refused)."
@@ -81,21 +83,25 @@ jobs:
           fi
           gh label create uptime --description "Automated uptime probe" \
             --color B60205 2>/dev/null || true
+          cat >/tmp/body.md <<EOF
+          The scheduled uptime probe against \`$MCP_ENDPOINT\` failed.
+
+          Run: $RUN_URL
+
+          Check proxy-level reachability first. The Fly health check cannot
+          detect connection-limit saturation (see #158), so \`fly status\`
+          reporting a passing check does not rule it out:
+
+          \`\`\`
+          fly ssh console -a cratesio-mcp -C "sh -c 'cat /proc/net/tcp'" \\
+            | awk 'NR>2 && \$4=="01" {n++} END {print n}'
+          \`\`\`
+
+          Compare that count against \`hard_limit\` in \`fly.toml\`.
+          EOF
           gh issue create --label uptime \
             --title "Deployed server failing uptime probe" \
-            --body "The scheduled uptime probe against \`$MCP_ENDPOINT\` failed.
-
-Run: $RUN_URL
-
-Check proxy-level reachability first. The Fly health check cannot detect
-connection-limit saturation (see #158), so \`fly status\` reporting a passing
-check does not rule it out:
-
-\`\`\`
-fly ssh console -a cratesio-mcp -C \"sh -c 'cat /proc/net/tcp'\" | awk 'NR>2 && \$4==\"01\" {n++} END {print n}'
-\`\`\`
-
-Compare that count against \`hard_limit\` in \`fly.toml\`."
+            --body-file /tmp/body.md
 
       - name: Close outage issue on recovery
         if: success()
