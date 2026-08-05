@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.1] - 2026-08-05
+
+### Bug Fixes
+
+- Clear Fly Proxy connection saturation and probe the deployment ([#159](https://github.com/joshrotenberg/cratesio-mcp/pull/159))
+
+
+
 ## [0.4.0] - 2026-08-02
 
 ### Features
