@@ -1956,6 +1956,7 @@ version = "1.0.149"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
 dependencies = [
+ "indexmap",
  "itoa",
  "memchr",
  "serde",
@@ -2337,9 +2338,9 @@ checksum = "121c2a6cda46980bb0fcd1647ffaf6cd3fc79a013de288782836f6df9c48780e"
 
 [[package]]
 name = "tower-mcp"
-version = "0.17.1"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0747f1ae227377580fd5cd840c2eb00b8e4cdc6918aea154d82c83c8edd6d61"
+checksum = "f8ef1781ae19c64b9a7dc9202a35ed63ee45a2e97ccc5b97747fd197d0bf6f80"
 dependencies = [
  "async-trait",
  "axum",
@@ -2368,11 +2369,12 @@ dependencies = [
 
 [[package]]
 name = "tower-mcp-types"
-version = "0.17.1"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "903efccc0f41dfdfd96ee2967d0c080b8c1413190dc322fc3abbcf284abc427a"
+checksum = "31aace137391a8ced9420b20337795f73e55e91992b510781d4056d560f032dd"
 dependencies = [
  "base64 0.23.0",
+ "indexmap",
  "serde",
  "serde_json",
  "thiserror",

@@ -48,7 +48,7 @@ mcp = [
 
 [dependencies]
 # Core MCP (server only)
-tower-mcp = { version = "0.17.1", features = ["http", "protocol-2026-07-28", "testing"], optional = true }
+tower-mcp = { version = "0.20.0", features = ["http", "protocol-2026-07-28", "testing"], optional = true }
 # HTTP server types, for the client-IP request-logging middleware on the HTTP transport
 axum = { version = "0.8", optional = true }
 
