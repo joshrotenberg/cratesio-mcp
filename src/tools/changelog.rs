@@ -24,26 +24,39 @@ pub struct ChangelogInput {
     version: Option<String>,
 }
 
-/// Result of locating and optionally filtering a crate changelog.
+/// Outcome discriminant for a changelog lookup.
 #[derive(Debug, Serialize, JsonSchema)]
-#[serde(tag = "status", rename_all = "snake_case")]
-enum ChangelogOutput {
-    Found {
-        name: String,
-        version: Option<String>,
-        filename: String,
-        content: String,
-    },
-    NoRepository {
-        name: String,
-    },
-    UnsupportedRepository {
-        name: String,
-        url: String,
-    },
-    NotFound {
-        name: String,
-    },
+#[serde(rename_all = "snake_case")]
+enum ChangelogStatus {
+    Found,
+    NoRepository,
+    UnsupportedRepository,
+    NotFound,
+}
+
+/// Result of locating and optionally filtering a crate changelog.
+///
+/// Serialized as a flat object whose root `type` is `"object"` (a requirement
+/// of the MCP `Tool.outputSchema`), with `status` discriminating the outcome.
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+struct ChangelogOutput {
+    /// Discriminant describing the outcome.
+    status: ChangelogStatus,
+    /// Crate name.
+    name: String,
+    /// Requested version filter, when provided.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<String>,
+    /// Changelog filename that was located, when a changelog was found.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    filename: Option<String>,
+    /// Changelog content (optionally filtered by version), when located.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+    /// Repository URL, when the repository is not on GitHub.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
 }
 
 pub fn build(state: Arc<AppState>) -> Tool {
@@ -70,7 +83,14 @@ pub fn build(state: Arc<AppState>) -> Tool {
                 match result {
                     ChangelogResult::NoRepository => {
                         let output = format!("No repository URL found for crate `{}`.", input.name);
-                        let result = ChangelogOutput::NoRepository { name: input.name };
+                        let result = ChangelogOutput {
+                            status: ChangelogStatus::NoRepository,
+                            name: input.name,
+                            version: None,
+                            filename: None,
+                            content: None,
+                            url: None,
+                        };
                         structured(output, &result)
                     }
                     ChangelogResult::NotGitHub { url } => {
@@ -79,9 +99,13 @@ pub fn build(state: Arc<AppState>) -> Tool {
                              Only GitHub repositories are supported.",
                             input.name, url
                         );
-                        let result = ChangelogOutput::UnsupportedRepository {
+                        let result = ChangelogOutput {
+                            status: ChangelogStatus::UnsupportedRepository,
                             name: input.name,
-                            url,
+                            version: None,
+                            filename: None,
+                            content: None,
+                            url: Some(url),
                         };
                         structured(output, &result)
                     }
@@ -91,7 +115,14 @@ pub fn build(state: Arc<AppState>) -> Tool {
                              Tried: CHANGELOG.md, CHANGES.md, HISTORY.md, RELEASES.md.",
                             input.name
                         );
-                        let result = ChangelogOutput::NotFound { name: input.name };
+                        let result = ChangelogOutput {
+                            status: ChangelogStatus::NotFound,
+                            name: input.name,
+                            version: None,
+                            filename: None,
+                            content: None,
+                            url: None,
+                        };
                         structured(output, &result)
                     }
                     ChangelogResult::Found { filename, content } => {
@@ -106,11 +137,13 @@ pub fn build(state: Arc<AppState>) -> Tool {
                             None => content,
                         };
                         let output = format!("# {} - {}\n\n{}", input.name, filename, body);
-                        let result = ChangelogOutput::Found {
+                        let result = ChangelogOutput {
+                            status: ChangelogStatus::Found,
                             name: input.name,
                             version: input.version,
-                            filename,
-                            content: body,
+                            filename: Some(filename),
+                            content: Some(body),
+                            url: None,
                         };
                         structured(output, &result)
                     }
