@@ -31,15 +31,7 @@ jobs:
     if: github.repository == 'joshrotenberg/cratesio-mcp'
     env:
       MCP_ENDPOINT: https://cratesio-mcp.fly.dev/
-      MCP_REPL_VERSION: "0.1.7"
       MCP_TYPESCRIPT_CLIENT_VERSION: "2.0.0"
-      # This probe answers "is the deployment reachable and serving", which is
-      # what can change between runs. Whether the deployed binary implements
-      # `subscriptions/listen` cannot, since the artifact is fixed until the
-      # next release, so that check belongs to the release gate in deploy.yml.
-      # Leaving it on here would open an outage issue and then comment on it
-      # every two hours over a protocol gap that is neither an outage nor new.
-      MCP_VALIDATE_SUBSCRIPTION: "0"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -59,21 +51,37 @@ jobs:
             exit 1
           fi
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install mcp-repl
-        run: cargo install mcp-repl --version "$MCP_REPL_VERSION" --locked
-
       - name: Install official TypeScript MCP client
         run: >-
           npm install --no-save --no-package-lock --no-audit --no-fund
           "@modelcontextprotocol/client@$MCP_TYPESCRIPT_CLIENT_VERSION"
 
+      # Runs the deployment probe directly rather than through
+      # validate-release.sh. The release suite additionally asserts schemas and
+      # annotations across both protocol lifecycles via mcp-repl, which is
+      # release-gate value: the deployed artifact cannot change between two
+      # uptime runs, so re-checking it twelve times a day re-verifies something
+      # that could not have moved. Installing mcp-repl compiles it from source
+      # and was 142s of a 155s job (#161).
+      #
+      # What this keeps is what can change without a deploy: reachability,
+      # final-protocol negotiation, a live subscription stream coexisting with
+      # requests, and a real tools/call through the outbound crates.io client.
+      #
       # EXPECTED_VERSION is deliberately unset: this checks that the deployed
       # server works, not that it matches any particular release tag.
       - name: Validate deployed server
-        run: bash scripts/validate-release.sh
+        run: |
+          # Retry a transient blip rather than opening an outage issue for it.
+          for attempt in 1 2 3; do
+            if node scripts/validate-deployment.mjs "$MCP_ENDPOINT"; then
+              exit 0
+            fi
+            echo "attempt $attempt failed" >&2
+            [ "$attempt" -lt 3 ] && sleep 10
+          done
+          echo "::error::Deployment validation failed after 3 attempts."
+          exit 1
 
       # One open issue per outage, not one per failed run.
       - name: Open or update outage issue

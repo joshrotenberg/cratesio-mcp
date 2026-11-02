@@ -1,6 +1,6 @@
 const endpoint = process.argv[2] ?? process.env.MCP_ENDPOINT;
 if (!endpoint) {
-  throw new Error('usage: node validate-subscription.mjs <MCP endpoint>');
+  throw new Error('usage: node validate-deployment.mjs <MCP endpoint>');
 }
 
 const timeoutMs = Number(process.env.MCP_SUBSCRIPTION_TIMEOUT_MS ?? '10000');
@@ -12,12 +12,18 @@ if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
 // requires an Mcp-Method header: without it `initialize` fails with -32020.
 const FINAL_PROTOCOL = '2026-07-28';
 
-const requestHeaders = (method) => {
+const requestHeaders = (method, name) => {
   const headers = {
     'content-type': 'application/json',
     accept: 'application/json, text/event-stream',
     'mcp-method': method,
   };
+  // SEP-2243: `tools/call` must name the tool in a header as well as in
+  // params, or the server rejects it with
+  // -32020 "Mcp-Name header is required for tools/call requests".
+  if (name !== undefined) {
+    headers['mcp-name'] = name;
+  }
   // `initialize` is the negotiation request: it carries the version in params
   // and must NOT send this header, or the server treats it as an already
   // negotiated modern request and demands the _meta that only post-negotiation
@@ -42,10 +48,10 @@ const finalMeta = () => ({
   },
 });
 
-async function post(method, body, init = {}) {
+async function post(method, body, init = {}, name) {
   const res = await fetch(endpoint, {
     method: 'POST',
-    headers: requestHeaders(method),
+    headers: requestHeaders(method, name),
     body: JSON.stringify(body),
     ...init,
   });
@@ -141,6 +147,97 @@ async function openSubscription() {
   return controller;
 }
 
+/**
+ * Make a real `tools/call` and assert on the result.
+ *
+ * This is the check #161 names as the one that must not be lost when the
+ * uptime probe drops `mcp-repl`: it is the only one that exercises the
+ * outbound crates.io client, the rate limiter and the cache, and that surface
+ * can break with no deploy at all. The assertions mirror
+ * `validate_tool_result` in `validate-release.sh` so nothing is weakened by
+ * moving off the REPL.
+ */
+async function validateToolCall() {
+  const res = await post(
+    'tools/call',
+    {
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'tools/call',
+      params: {
+        name: 'search_crates',
+        arguments: { query: 'tower-mcp' },
+        ...finalMeta(),
+      },
+    },
+    {},
+    'search_crates',
+  );
+
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(
+      `tools/call returned HTTP ${res.status}: ${text.slice(0, 300)}`,
+    );
+  }
+
+  let result;
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed.error) {
+      throw new Error(`tools/call returned ${JSON.stringify(parsed.error)}`);
+    }
+    result = parsed.result;
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(`tools/call returned non-JSON: ${text.slice(0, 300)}`);
+    }
+    throw error;
+  }
+
+  const structured = result?.structuredContent ?? {};
+  const crates = structured.crates;
+  const failures = [];
+
+  if (result?.isError) failures.push('isError was true');
+  if (!Array.isArray(crates)) {
+    failures.push('structuredContent.crates was not an array');
+  } else {
+    if (crates.length === 0) failures.push('structuredContent.crates was empty');
+    if (!crates.some((c) => c?.name === 'tower-mcp')) {
+      failures.push('structuredContent.crates did not include tower-mcp');
+    }
+  }
+  if (!(structured.meta?.total > 0)) {
+    failures.push('structuredContent.meta.total was not greater than zero');
+  }
+  if (
+    !(result?.content ?? []).some(
+      (part) => part?.type === 'text' && (part.text ?? '').includes('tower-mcp'),
+    )
+  ) {
+    failures.push('no text content part mentioned tower-mcp');
+  }
+
+  // Release validation pins the deployed version; the uptime probe leaves
+  // EXPECTED_VERSION unset, since it checks that the server works rather than
+  // that it matches a particular tag.
+  const expected = (process.env.EXPECTED_VERSION ?? '').replace(/^v/, '');
+  const reported =
+    result?._meta?.['io.modelcontextprotocol/serverInfo']?.version;
+  if (expected && reported !== expected) {
+    failures.push(
+      `server reported version ${reported ?? '(none)'}, expected ${expected}`,
+    );
+  }
+
+  if (failures.length > 0) {
+    throw new Error(`search_crates returned an unexpected tool result:\n  ${failures.join('\n  ')}`);
+  }
+
+  return { crateCount: crates.length, version: reported };
+}
+
 const moduleSpecifier =
   process.env.MCP_CLIENT_MODULE ?? '@modelcontextprotocol/client';
 
@@ -210,8 +307,12 @@ await assertFinalProtocol();
 
 const subscription = await openSubscription();
 let result;
+let toolCall;
 try {
   result = await validateConcurrentListTools();
+  // Run the real tool call while the stream is still held open, so this also
+  // covers a request path competing with a live subscription.
+  toolCall = await validateToolCall();
 } finally {
   subscription.abort();
 }
@@ -224,6 +325,7 @@ for (const error of unexpected) {
 }
 
 console.log(
-  `Subscription concurrency validation passed ` +
-    `(${result.toolCount} tools, stream confirmed open)`,
+  `Deployment validation passed (${result.toolCount} tools, stream confirmed ` +
+    `open, search_crates returned ${toolCall.crateCount} crates` +
+    `${toolCall.version ? `, server ${toolCall.version}` : ''})`,
 );
