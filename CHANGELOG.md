@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.3] - 2026-11-02
+
+### Testing
+
+- Assert every tool declares an object-rooted outputSchema ([#169](https://github.com/joshrotenberg/cratesio-mcp/pull/169))
+
+
+
 ## [0.4.2] - 2026-11-02
 
 ### Bug Fixes
