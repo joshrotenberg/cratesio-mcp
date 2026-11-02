@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Bug Fixes
 
+- **deps:** Patch RUSTSEC-2026-0258 and RUSTSEC-2026-0386 ([#166](https://github.com/joshrotenberg/cratesio-mcp/pull/166))
 - Make get_crate_changelog outputSchema MCP-compliant ([#164](https://github.com/joshrotenberg/cratesio-mcp/pull/164))
 
 ### Features
