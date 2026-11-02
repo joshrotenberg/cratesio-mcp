@@ -7,6 +7,16 @@ max_attempts="${MCP_VALIDATION_ATTEMPTS:-3}"
 retry_delay="${MCP_VALIDATION_RETRY_DELAY_SECS:-5}"
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
+# Whether `subscriptions/listen` opens is a property of the deployed artifact,
+# not of its liveness: it cannot change between two runs against the same
+# build. That makes it release-gate value rather than uptime value, so the
+# uptime probe sets this to 0 and the release gate leaves it on.
+#
+# Default ON deliberately. A new release path then inherits the check instead
+# of having to remember it, and opting out is a visible act recorded in the
+# workflow that does it.
+validate_subscription="${MCP_VALIDATE_SUBSCRIPTION:-1}"
+
 validate_tools() {
   local protocol="$1"
   local tools_json
@@ -75,8 +85,19 @@ validate_tool_result() {
 }
 
 validate_subscription_concurrency() {
+  if [[ "$validate_subscription" != "1" ]]; then
+    # Said out loud on purpose. A skipped check that printed nothing would be
+    # indistinguishable from a passing one, which is the exact defect this
+    # script was fixed for.
+    echo "SKIPPED subscription validation (MCP_VALIDATE_SUBSCRIPTION=$validate_subscription)"
+    return 0
+  fi
+
+  # The script asserts two things: that subscriptions/listen actually opens an
+  # SSE stream, and that tools/list completes while it is held open. It prints
+  # which one failed, so this message no longer guesses.
   if ! node "$script_dir/validate-subscription.mjs" "$endpoint"; then
-    echo "official client could not list tools with subscriptions/listen open" >&2
+    echo "subscription validation failed; see the error above" >&2
     return 1
   fi
 }

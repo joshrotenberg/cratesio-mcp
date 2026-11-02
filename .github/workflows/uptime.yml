@@ -33,6 +33,13 @@ jobs:
       MCP_ENDPOINT: https://cratesio-mcp.fly.dev/
       MCP_REPL_VERSION: "0.1.7"
       MCP_TYPESCRIPT_CLIENT_VERSION: "2.0.0"
+      # This probe answers "is the deployment reachable and serving", which is
+      # what can change between runs. Whether the deployed binary implements
+      # `subscriptions/listen` cannot, since the artifact is fixed until the
+      # next release, so that check belongs to the release gate in deploy.yml.
+      # Leaving it on here would open an outage issue and then comment on it
+      # every two hours over a protocol gap that is neither an outage nor new.
+      MCP_VALIDATE_SUBSCRIPTION: "0"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
