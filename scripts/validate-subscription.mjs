@@ -12,10 +12,34 @@ if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
 // requires an Mcp-Method header: without it `initialize` fails with -32020.
 const FINAL_PROTOCOL = '2026-07-28';
 
-const requestHeaders = (method) => ({
-  'content-type': 'application/json',
-  accept: 'application/json, text/event-stream',
-  'mcp-method': method,
+const requestHeaders = (method) => {
+  const headers = {
+    'content-type': 'application/json',
+    accept: 'application/json, text/event-stream',
+    'mcp-method': method,
+  };
+  // `initialize` is the negotiation request: it carries the version in params
+  // and must NOT send this header, or the server treats it as an already
+  // negotiated modern request and demands the _meta that only post-negotiation
+  // requests carry.
+  //
+  // Every other request must send it. Without it the server falls back to the
+  // session's negotiated version, which for a fresh stateless request is the
+  // stable protocol, and then correctly refuses `subscriptions/listen` with
+  // -32601. Omitting it produces a convincing false failure.
+  if (method !== 'initialize') {
+    headers['mcp-protocol-version'] = FINAL_PROTOCOL;
+  }
+  return headers;
+};
+
+// Every final-protocol request must carry these, or the server rejects it with
+// -32602 before the method is ever considered.
+const finalMeta = () => ({
+  '_meta': {
+    'io.modelcontextprotocol/protocolVersion': FINAL_PROTOCOL,
+    'io.modelcontextprotocol/clientCapabilities': {},
+  },
 });
 
 async function post(method, body, init = {}) {
@@ -38,6 +62,8 @@ async function assertFinalProtocol() {
     jsonrpc: '2.0',
     id: 1,
     method: 'initialize',
+    // `initialize` negotiates the version, so it carries it in params rather
+    // than in the _meta the other final-protocol requests require.
     params: {
       protocolVersion: FINAL_PROTOCOL,
       capabilities: {},
@@ -80,7 +106,17 @@ async function openSubscription() {
   const controller = new AbortController();
   const res = await post(
     'subscriptions/listen',
-    { jsonrpc: '2.0', id: 2, method: 'subscriptions/listen', params: {} },
+    {
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'subscriptions/listen',
+      params: {
+        // A map of booleans. An array of notification names is rejected with
+        // "expected a boolean".
+        notifications: { tools: true, resources: true, prompts: true },
+        ...finalMeta(),
+      },
+    },
     { signal: controller.signal },
   );
 
