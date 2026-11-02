@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.2] - 2026-11-02
+
+### Bug Fixes
+
+- **deps:** Patch RUSTSEC-2026-0258 and RUSTSEC-2026-0386 ([#166](https://github.com/joshrotenberg/cratesio-mcp/pull/166))
+- Make get_crate_changelog outputSchema MCP-compliant ([#164](https://github.com/joshrotenberg/cratesio-mcp/pull/164))
+
+### Features
+
+- Add an init subcommand to register with Claude Code and Codex ([#167](https://github.com/joshrotenberg/cratesio-mcp/pull/167))
+
+
+
 ## [0.4.1] - 2026-08-05
 
 ### Bug Fixes
