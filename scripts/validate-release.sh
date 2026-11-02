@@ -75,8 +75,11 @@ validate_tool_result() {
 }
 
 validate_subscription_concurrency() {
+  # The script asserts two things now: that subscriptions/listen actually opens
+  # an SSE stream, and that tools/list completes while it is held open. It
+  # prints which one failed, so this message no longer guesses.
   if ! node "$script_dir/validate-subscription.mjs" "$endpoint"; then
-    echo "official client could not list tools with subscriptions/listen open" >&2
+    echo "subscription validation failed; see the error above" >&2
     return 1
   fi
 }
