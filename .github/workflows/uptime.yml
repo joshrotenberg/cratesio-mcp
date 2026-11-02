@@ -36,9 +36,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Fast, dependency-free reachability check. Runs before the toolchain
-      # setup so a proxy-level outage fails in seconds with an obvious message
-      # instead of waiting on a cargo install that is irrelevant to the fault.
+      # Fast, dependency-free reachability check. Runs before the npm install
+      # so a proxy-level outage fails in seconds with an obvious message rather
+      # than after dependency setup that is irrelevant to the fault.
       - name: Probe public health endpoint
         run: |
           # curl already writes 000 for a timeout or refused connection, so
