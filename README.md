@@ -16,7 +16,13 @@ Under the hood it is also a standalone, dependency-light **crates.io API client 
 
 ### Hosted (no install)
 
-A public instance is running at **https://cratesio-mcp.fly.dev/**. Add to your MCP client config:
+A public instance is running at **https://cratesio-mcp.fly.dev/**. If you have the binary, point a client at it with:
+
+```bash
+cratesio-mcp init --mode hosted
+```
+
+Otherwise add it to your client config by hand:
 
 ```json
 {
@@ -51,19 +57,68 @@ docker run -p 3000:3000 ghcr.io/joshrotenberg/cratesio-mcp:latest
 
 ## MCP client configuration
 
-### Claude Code (stdio)
+### Using `init`
+
+`cratesio-mcp init` registers the server with whichever supported clients it finds, by calling that client's own CLI:
+
+```bash
+cratesio-mcp init
+```
+
+Over stdio a client needs the absolute path of the binary, and that path differs between `cargo install`, Homebrew and a source build. `init` registers the path of the running binary, so it is correct for the way you actually installed it.
+
+```bash
+# Claude Code only, in the current project rather than your user config
+cratesio-mcp init --client claude --scope project
+
+# Point at the hosted deployment instead of a local binary
+cratesio-mcp init --mode hosted
+
+# Register under a different name
+cratesio-mcp init --name crates
+
+# See the exact command without running it
+cratesio-mcp init --dry-run
+```
+
+| Flag | Values | Default | Notes |
+|---|---|---|---|
+| `--client` | `claude`, `codex`, `all` | `all` | `all` configures every client whose CLI is on `PATH` and reports the rest |
+| `--mode` | `stdio`, `hosted` | `stdio` | `hosted` uses `--url` instead of a local binary |
+| `--name` | any | `cratesio-mcp` | name the server is registered under |
+| `--url` | any | the hosted instance | only used by `--mode hosted` |
+| `--scope` | `local`, `user`, `project` | `user` | Claude Code only; Codex has no equivalent |
+| `--dry-run` | | off | print the command, run nothing |
+| `--print` | | off | print config snippets, call no CLI |
+
+`init` writes nothing itself. It shells out to `claude mcp add` or `codex mcp add`, so each client stays responsible for its own config file and scope rules.
+
+### Configuring by hand
+
+`cratesio-mcp init --print` emits the snippet for each client without touching anything:
+
+```bash
+cratesio-mcp init --print
+cratesio-mcp init --print --mode hosted
+```
+
+This is the only route for **Claude Desktop**, which has no CLI. Paste the snippet into `claude_desktop_config.json`.
+
+Claude Code (`~/.claude.json`, or `.mcp.json` in a project) and Claude Desktop share one shape:
 
 ```json
 {
   "mcpServers": {
     "cratesio-mcp": {
-      "command": "cratesio-mcp"
+      "type": "stdio",
+      "command": "/absolute/path/to/cratesio-mcp",
+      "args": ["--transport", "stdio"]
     }
   }
 }
 ```
 
-### Claude Code (HTTP, local or remote)
+Over HTTP, local or remote:
 
 ```json
 {
@@ -76,18 +131,12 @@ docker run -p 3000:3000 ghcr.io/joshrotenberg/cratesio-mcp:latest
 }
 ```
 
-### Claude Desktop
+Codex uses a TOML table in `~/.codex/config.toml`:
 
-Add to `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "cratesio-mcp": {
-      "command": "cratesio-mcp"
-    }
-  }
-}
+```toml
+[mcp_servers.cratesio-mcp]
+command = "/absolute/path/to/cratesio-mcp"
+args = ["--transport", "stdio"]
 ```
 
 ## What's included
