@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use clap::{Parser, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 use cratesio_mcp::{prompts, resources, state::AppState, tools};
 use tower::ServiceBuilder;
 use tower::timeout::TimeoutLayer;
@@ -15,10 +15,20 @@ use tower_resilience::bulkhead::BulkheadLayer;
 use tower_resilience::cache::SharedCacheLayer;
 use tower_resilience::ratelimiter::RateLimiterLayer;
 
+mod init;
+
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum Transport {
     Stdio,
     Http,
+}
+
+/// Subcommands. Absent means "run the server", which is the behavior every
+/// existing invocation relies on.
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Register this server with an MCP client (Claude Code, Codex)
+    Init(init::InitArgs),
 }
 
 #[derive(Parser, Debug)]
@@ -89,11 +99,27 @@ struct Args {
     /// of unexpected traffic. Logs end-user IP addresses when on.
     #[arg(long, default_value = "false")]
     log_requests: bool,
+
+    #[command(subcommand)]
+    command: Option<Command>,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), tower_mcp::BoxError> {
     let args = Args::parse();
+
+    // `init` only edits client configuration and exits. Handle it before the
+    // tracing subscriber and shared state below, none of which it needs.
+    if let Some(Command::Init(init_args)) = &args.command {
+        // Report via Display and exit, rather than returning the error. The
+        // default reporting for a `main` error uses Debug, which renders these
+        // multi-line messages with escaped newlines.
+        if let Err(e) = init::run(init_args) {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
 
     // Initialize tracing
     tracing_subscriber::fmt()
@@ -601,4 +627,93 @@ async fn log_http_request(
     }
 
     next.run(req).await
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    /// clap's own consistency checks: duplicate flags, bad defaults, a
+    /// subcommand that collides with a top-level argument.
+    #[test]
+    fn arg_definitions_are_internally_consistent() {
+        Args::command().debug_assert();
+    }
+
+    /// Adding a subcommand must not disturb the documented bare invocation.
+    #[test]
+    fn bare_invocation_still_runs_the_server() {
+        let args = Args::parse_from(["cratesio-mcp"]);
+        assert!(args.command.is_none(), "no subcommand means run the server");
+        assert!(matches!(args.transport, Transport::Stdio));
+        assert_eq!(args.port, 3000);
+        assert_eq!(args.host, "127.0.0.1");
+    }
+
+    #[test]
+    fn documented_server_flags_still_parse() {
+        let args = Args::parse_from([
+            "cratesio-mcp",
+            "--transport",
+            "http",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "8080",
+            "--log-requests",
+        ]);
+        assert!(args.command.is_none());
+        assert!(matches!(args.transport, Transport::Http));
+        assert_eq!(args.host, "0.0.0.0");
+        assert_eq!(args.port, 8080);
+        assert!(args.log_requests);
+    }
+
+    #[test]
+    fn init_defaults_to_stdio_for_every_installed_client() {
+        let args = Args::parse_from(["cratesio-mcp", "init"]);
+        let Some(Command::Init(init)) = &args.command else {
+            panic!("expected the init subcommand");
+        };
+        assert_eq!(init.client, init::ClientArg::All);
+        assert_eq!(init.mode, init::Mode::Stdio);
+        assert_eq!(init.name, "cratesio-mcp");
+        assert_eq!(init.scope, init::Scope::User);
+        assert!(!init.dry_run);
+        assert!(!init.print);
+    }
+
+    #[test]
+    fn init_accepts_each_client_mode_and_scope() {
+        let args = Args::parse_from([
+            "cratesio-mcp",
+            "init",
+            "--client",
+            "codex",
+            "--mode",
+            "hosted",
+            "--name",
+            "crates",
+            "--scope",
+            "project",
+            "--dry-run",
+        ]);
+        let Some(Command::Init(init)) = &args.command else {
+            panic!("expected the init subcommand");
+        };
+        assert_eq!(init.client, init::ClientArg::Codex);
+        assert_eq!(init.mode, init::Mode::Hosted);
+        assert_eq!(init.name, "crates");
+        assert_eq!(init.scope, init::Scope::Project);
+        assert!(init.dry_run);
+    }
+
+    #[test]
+    fn init_rejects_an_unknown_client() {
+        assert!(
+            Args::try_parse_from(["cratesio-mcp", "init", "--client", "cursor"]).is_err(),
+            "an unsupported client must be rejected rather than silently ignored"
+        );
+    }
 }
