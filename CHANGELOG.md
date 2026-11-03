@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.4] - 2026-11-03
+
+### Bug Fixes
+
+- Find changelogs in workspace subdirectories ([#176](https://github.com/joshrotenberg/cratesio-mcp/pull/176))
+
+
+
 ## [0.4.3] - 2026-11-02
 
 ### Testing
