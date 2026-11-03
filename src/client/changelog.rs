@@ -4,7 +4,9 @@ use super::{CratesIoClient, Error};
 
 /// The result of a changelog fetch attempt.
 pub enum ChangelogResult {
-    /// Changelog content found.
+    /// Changelog content found. `filename` is the matched path relative to the
+    /// repository root, so a workspace crate reports `tokio/CHANGELOG.md`
+    /// rather than a bare `CHANGELOG.md`.
     Found { filename: String, content: String },
     /// The crate has no repository URL set.
     NoRepository,
@@ -30,7 +32,9 @@ impl CratesIoClient {
     /// Fetch changelog content for a crate from its GitHub repository.
     ///
     /// Looks up the crate's repository URL, and if it points to GitHub, tries
-    /// common changelog filenames via the raw.githubusercontent.com CDN.
+    /// common changelog filenames via the raw.githubusercontent.com CDN, first
+    /// at the repository root and then under the crate's own directory, which
+    /// is where most Cargo workspaces keep them.
     /// Returns a [`ChangelogResult`] describing what was found (or why nothing
     /// could be fetched).
     pub async fn fetch_changelog(&self, name: &str) -> Result<ChangelogResult, Error> {
@@ -47,19 +51,34 @@ impl CratesIoClient {
             None => return Ok(ChangelogResult::NotGitHub { url: repo_url }),
         };
 
-        // Try each common filename.
-        for filename in CHANGELOG_FILENAMES {
-            let url = format!(
-                "{}/{}/{}/HEAD/{}",
-                self.github_raw_base_url, owner, repo, filename
-            );
-            let resp = self.http.get(&url).send().await?;
-            if resp.status().is_success() {
-                let content = resp.text().await?;
-                return Ok(ChangelogResult::Found {
-                    filename: filename.to_string(),
-                    content,
-                });
+        // Candidate directories, in order. Root first, so a crate whose
+        // changelog is already at the root costs no extra requests.
+        //
+        // The crate-named directory is the only fallback with evidence behind
+        // it. A survey of 20 popular crates found 11 changelogs at the root, 5
+        // under `<crate-name>/` (tokio, tracing, tower, tokio-util,
+        // tracing-subscriber) and none under `crates/<crate-name>/`; the four
+        // with no changelog anywhere were checked against all filenames under
+        // all three prefixes. See #175.
+        let prefixes = [String::new(), format!("{name}/")];
+
+        for prefix in &prefixes {
+            for filename in CHANGELOG_FILENAMES {
+                let path = format!("{prefix}{filename}");
+                let url = format!(
+                    "{}/{}/{}/HEAD/{}",
+                    self.github_raw_base_url, owner, repo, path
+                );
+                let resp = self.http.get(&url).send().await?;
+                if resp.status().is_success() {
+                    let content = resp.text().await?;
+                    return Ok(ChangelogResult::Found {
+                        // The matched path, so the caller can tell
+                        // `CHANGELOG.md` from `tokio/CHANGELOG.md`.
+                        filename: path,
+                        content,
+                    });
+                }
             }
         }
 
@@ -144,6 +163,114 @@ mod tests {
             }
             _ => panic!("expected ChangelogResult::Found"),
         }
+    }
+
+    /// The #175 case: a workspace crate whose changelog lives under its own
+    /// directory. Unmounted paths 404 in wiremock, so the root candidates all
+    /// miss and the fallback has to find it.
+    #[tokio::test]
+    async fn fetch_changelog_found_in_crate_subdirectory() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/crates/mycrate"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(crate_json("mycrate", Some("https://github.com/owner/repo"))),
+            )
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/owner/repo/HEAD/mycrate/CHANGELOG.md"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("# Sub\n\n## 2.0.0\n- sub"))
+            .mount(&server)
+            .await;
+
+        let client = CratesIoClient::with_base_url(
+            "test",
+            Duration::from_millis(0),
+            Duration::from_secs(5),
+            &server.uri(),
+        )
+        .unwrap()
+        .with_github_raw_url(&server.uri());
+        match client.fetch_changelog("mycrate").await.unwrap() {
+            ChangelogResult::Found { filename, content } => {
+                // The matched path, not the bare filename: that is what tells
+                // the caller where it came from.
+                assert_eq!(filename, "mycrate/CHANGELOG.md");
+                assert!(content.contains("# Sub"));
+            }
+            _ => panic!("expected ChangelogResult::Found"),
+        }
+    }
+
+    /// Root must win when both exist, so crates that already worked keep their
+    /// current answer and pay nothing extra.
+    #[tokio::test]
+    async fn fetch_changelog_prefers_root_over_subdirectory() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/crates/mycrate"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(crate_json("mycrate", Some("https://github.com/owner/repo"))),
+            )
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/owner/repo/HEAD/CHANGELOG.md"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("# Root"))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/owner/repo/HEAD/mycrate/CHANGELOG.md"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("# Sub"))
+            .mount(&server)
+            .await;
+
+        let client = CratesIoClient::with_base_url(
+            "test",
+            Duration::from_millis(0),
+            Duration::from_secs(5),
+            &server.uri(),
+        )
+        .unwrap()
+        .with_github_raw_url(&server.uri());
+        match client.fetch_changelog("mycrate").await.unwrap() {
+            ChangelogResult::Found { filename, content } => {
+                assert_eq!(filename, "CHANGELOG.md");
+                assert!(content.contains("# Root"));
+            }
+            _ => panic!("expected Found"),
+        }
+    }
+
+    /// `serde` in miniature: a GitHub repository with no changelog file under
+    /// either prefix must still report NotFound rather than inventing one.
+    #[tokio::test]
+    async fn fetch_changelog_not_found_under_either_prefix() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/crates/mycrate"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(crate_json("mycrate", Some("https://github.com/owner/repo"))),
+            )
+            .mount(&server)
+            .await;
+
+        let client = CratesIoClient::with_base_url(
+            "test",
+            Duration::from_millis(0),
+            Duration::from_secs(5),
+            &server.uri(),
+        )
+        .unwrap()
+        .with_github_raw_url(&server.uri());
+        assert!(matches!(
+            client.fetch_changelog("mycrate").await.unwrap(),
+            ChangelogResult::NotFound
+        ));
     }
 
     #[tokio::test]
