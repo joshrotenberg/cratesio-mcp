@@ -11,6 +11,14 @@ env:
   RUSTFLAGS: -Dwarnings
 
 jobs:
+  release-validation:
+    name: Release validation scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 -B -m unittest discover -s scripts -p 'test_validate_release.py' -v
+
   fmt:
     name: Format
     runs-on: ubuntu-latest
